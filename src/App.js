@@ -1,11 +1,12 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { ChevronLeft, ChevronRight, X, Sun, Moon, Flame, Lock, Download, LogOut, Loader, LayoutDashboard, Target, BarChart3, Maximize, Minimize, ArrowUp, ArrowDown, Check, Trash2, Plus, Trophy } from 'lucide-react';
+import { ChevronLeft, ChevronRight, X, Sun, Moon, Flame, Lock, Download, LogOut, Loader, LayoutDashboard, Target, BarChart3, Maximize, Minimize, ArrowUp, ArrowDown, Check, Trash2, Plus, Trophy, User, Settings, Bell, BellOff, Languages } from 'lucide-react';
 import { LineChart, Line, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { motion, AnimatePresence } from 'framer-motion';
+import confetti from 'canvas-confetti';
 import './App.css';
 import Auth from './Auth';
 import { auth, db } from './firebase';
-import { onAuthStateChanged, signOut } from 'firebase/auth';
+import { onAuthStateChanged, signOut, updateProfile } from 'firebase/auth';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 
 const defaultActivities = [
@@ -27,6 +28,112 @@ const getDisplayDate = (dateString) => {
   return dateObj.toLocaleDateString('tr-TR', { day: 'numeric', month: 'long', weekday: 'long' });
 };
 
+const translations = {
+  tr: {
+    dashboard: 'Dashboard',
+    focus: 'Odak',
+    analytics: 'Analiz',
+    settings: 'Ayarlar',
+    logout: 'Çıkış Yap',
+    streak: 'Gün',
+    dailyFocus: 'Günün Odağı...',
+    yesterday: 'Dün',
+    tomorrow: 'Yarın',
+    howAreYou: 'Bugün Nasıl Hissediyorsun?',
+    newActivity: 'Yeni Aktivite Ekle',
+    weeklyEfficiency: 'Haftalık Verimlilik (%)',
+    duration: 'Süre (dk):',
+    start: 'BAŞLAT',
+    stop: 'DURDUR',
+    reset: 'SIFIRLA',
+    dailyTasks: 'Günlük Görevler',
+    newTask: 'Yeni görev ekle...',
+    noTasks: 'Henüz bir görev eklenmedi.',
+    performance4Weeks: 'Son 4 Haftalık Performans',
+    recordStreak: 'Rekor Seri',
+    longestChain: 'En uzun zincir',
+    vsLastWeek: 'vs geçen hafta',
+    weeklyReport: 'Haftalık Analiz Raporu',
+    appSettings: 'Uygulama Ayarları',
+    changeTheme: 'Tema Değiştir',
+    downloadData: 'Verileri İndir',
+    notifications: 'Bildirimler',
+    language: 'Dil',
+    editProfile: 'Profili Düzenle',
+    username: 'Kullanıcı Adı',
+    photoUrl: 'Profil Fotoğrafı (URL)',
+    save: 'Kaydet',
+    editActivity: 'Aktivite Düzenle',
+    activityName: 'Aktivite Adı',
+    dailyGoal: 'Günlük Hedef',
+    weeklyGoal: 'Haftalık Hedef',
+    colorTheme: 'Renk Teması',
+    bestDay: 'İstatistiklere göre en verimli gününüz:',
+    bestDaySuffix: '. En zorlu işleri bu güne planlayabilirsiniz.',
+    loading: 'Yükleniyor...',
+    thisWeek: 'Bu Hafta',
+    weeksAgo: 'H Önce',
+    locked: 'Geçmiş kilitli',
+    completed: 'tamamlandı'
+  },
+  en: {
+    dashboard: 'Dashboard',
+    focus: 'Focus',
+    analytics: 'Analytics',
+    settings: 'Settings',
+    logout: 'Log Out',
+    streak: 'Day',
+    dailyFocus: 'Daily Focus...',
+    yesterday: 'Yesterday',
+    tomorrow: 'Tomorrow',
+    howAreYou: 'How are you feeling today?',
+    newActivity: 'Add New Activity',
+    weeklyEfficiency: 'Weekly Efficiency (%)',
+    duration: 'Duration (min):',
+    start: 'START',
+    stop: 'STOP',
+    reset: 'RESET',
+    dailyTasks: 'Daily Tasks',
+    newTask: 'Add new task...',
+    noTasks: 'No tasks added yet.',
+    performance4Weeks: 'Last 4 Weeks Performance',
+    recordStreak: 'Record Streak',
+    longestChain: 'Longest chain',
+    vsLastWeek: 'vs last week',
+    weeklyReport: 'Weekly Analysis Report',
+    appSettings: 'App Settings',
+    changeTheme: 'Change Theme',
+    downloadData: 'Download Data',
+    notifications: 'Notifications',
+    language: 'Language',
+    editProfile: 'Edit Profile',
+    username: 'Username',
+    photoUrl: 'Profile Picture (URL)',
+    save: 'Save',
+    editActivity: 'Edit Activity',
+    activityName: 'Activity Name',
+    dailyGoal: 'Daily Goal',
+    weeklyGoal: 'Weekly Goal',
+    colorTheme: 'Color Theme',
+    bestDay: 'According to stats, your most productive day is:',
+    bestDaySuffix: '. You can plan your hardest tasks for this day.',
+    loading: 'Loading...',
+    thisWeek: 'This Week',
+    weeksAgo: 'W Ago',
+    locked: 'History locked',
+    completed: 'completed'
+  }
+};
+
+const accentColors = [
+  { value: '#3b82f6', label: 'Mavi' },
+  { value: '#10b981', label: 'Yeşil' },
+  { value: '#8b5cf6', label: 'Mor' },
+  { value: '#f59e0b', label: 'Turuncu' },
+  { value: '#ec4899', label: 'Pembe' },
+  { value: '#ef4444', label: 'Kırmızı' },
+];
+
 function App() {
   const [user, setUser] = useState(null);
   const [authLoading, setAuthLoading] = useState(true);
@@ -35,8 +142,10 @@ function App() {
   const [historyData, setHistoryData] = useState({});
   const [moods, setMoods] = useState({});
   const [todos, setTodos] = useState([]);
+  const [dailyGoals, setDailyGoals] = useState({});
   const [newTodo, setNewTodo] = useState('');
   const [activeTab, setActiveTab] = useState('dashboard');
+  const [currentTime, setCurrentTime] = useState(new Date());
   
   const [newName, setNewName] = useState('');
   const [newGoal, setNewGoal] = useState('');
@@ -47,8 +156,16 @@ function App() {
   const [timeLeft, setTimeLeft] = useState(25 * 60);
   const [isActive, setIsActive] = useState(false);
   const [isFullScreen, setIsFullScreen] = useState(false);
+  const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
+  const [editingActivity, setEditingActivity] = useState(null);
+  const [newDisplayName, setNewDisplayName] = useState('');
+  const [newPhotoURL, setNewPhotoURL] = useState('');
+  const [notifications, setNotifications] = useState(() => JSON.parse(localStorage.getItem('appNotifications')) ?? true);
+  const [language, setLanguage] = useState(() => localStorage.getItem('appLanguage') || 'tr');
+  const [accentColor, setAccentColor] = useState(() => localStorage.getItem('appAccentColor') || '#3b82f6');
 
   const isEditable = currentDate === formatDate(new Date());
+  const t = translations[language];
 
   // Firebase Auth Listener & Data Loading
   useEffect(() => {
@@ -70,17 +187,20 @@ function App() {
             setHistoryData(data.historyData || { [formatDate(new Date())]: defaultActivities });
             setMoods(data.moods || {});
             setTodos(data.todos || []);
+            setDailyGoals(data.dailyGoals || {});
           } else {
             // New user, initialize with default data for today
             setHistoryData({ [formatDate(new Date())]: defaultActivities });
             setMoods({});
             setTodos([]);
+            setDailyGoals({});
           }
         } else {
           setUser(null);
           setHistoryData({});
           setMoods({});
           setTodos([]);
+          setDailyGoals({});
         }
       } catch (error) {
         console.error("Firebase veri yükleme hatası:", error);
@@ -102,17 +222,28 @@ function App() {
 
     const debounceSave = setTimeout(async () => {
       const userDocRef = doc(db, 'users', user.uid);
-      await setDoc(userDocRef, { historyData, moods, todos }, { merge: true });
+      await setDoc(userDocRef, { historyData, moods, todos, dailyGoals }, { merge: true });
     }, 1500); // Debounce to avoid too many writes
 
     return () => clearTimeout(debounceSave);
-  }, [historyData, moods, todos, user]);
+  }, [historyData, moods, todos, dailyGoals, user]);
 
   // Theme persistence
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme);
     localStorage.setItem('appTheme', theme);
   }, [theme]);
+
+  // Language persistence
+  useEffect(() => {
+    localStorage.setItem('appLanguage', language);
+  }, [language]);
+
+  // Accent Color persistence
+  useEffect(() => {
+    document.documentElement.style.setProperty('--brand-blue', accentColor);
+    localStorage.setItem('appAccentColor', accentColor);
+  }, [accentColor]);
 
   useEffect(() => {
     let interval = null;
@@ -130,6 +261,12 @@ function App() {
     } else { clearInterval(interval); }
     return () => clearInterval(interval);
   }, [isActive, timeLeft]);
+
+  // Dijital Saat
+  useEffect(() => {
+    const timer = setInterval(() => setCurrentTime(new Date()), 1000);
+    return () => clearInterval(timer);
+  }, []);
 
   // Tarayıcı sekmesinde (Title) kalan süreyi göster
   useEffect(() => {
@@ -150,6 +287,42 @@ function App() {
     window.addEventListener('keydown', handleEsc);
     return () => window.removeEventListener('keydown', handleEsc);
   }, []);
+
+  // Günün Hedefi İşlemleri (Object yapısına geçiş ve Confetti)
+  const getDailyGoal = (date) => {
+    const goal = dailyGoals[date];
+    // Eski string verileri desteklemek için kontrol
+    if (typeof goal === 'string') return { text: goal, completed: false };
+    return goal || { text: '', completed: false };
+  };
+
+  const currentGoal = getDailyGoal(currentDate);
+
+  const handleGoalChange = (val) => {
+    setDailyGoals({
+      ...dailyGoals,
+      [currentDate]: { ...currentGoal, text: val }
+    });
+  };
+
+  const toggleGoalCompletion = () => {
+    if (!isEditable) return;
+    const newCompleted = !currentGoal.completed;
+    setDailyGoals({
+      ...dailyGoals,
+      [currentDate]: { ...currentGoal, completed: newCompleted }
+    });
+    
+    if (newCompleted) {
+      confetti({
+        particleCount: 100,
+        spread: 70,
+        origin: { y: 0.6 }
+      });
+    }
+  };
+
+  const chartColor = accentColor;
 
   // To-Do İşlemleri
   const addTodo = (e) => {
@@ -208,7 +381,7 @@ function App() {
         });
         
         weeklyScores.push({
-            name: i === 0 ? 'Bu Hafta' : `${i}H Önce`,
+            name: i === 0 ? t.thisWeek : `${i}${t.weeksAgo}`,
             Skor: daysWithData > 0 ? Math.round(weekTotalProgress / daysWithData) : 0,
         });
         weeklyActivityTotals.push(activityTotals);
@@ -229,7 +402,7 @@ function App() {
     });
 
     // En Verimli Gün Hesaplama
-    const daysOfWeek = ['Pazar', 'Pazartesi', 'Salı', 'Çarşamba', 'Perşembe', 'Cuma', 'Cumartesi'];
+    const daysOfWeek = language === 'tr' ? ['Pazar', 'Pazartesi', 'Salı', 'Çarşamba', 'Perşembe', 'Cuma', 'Cumartesi'] : ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
     const dayScores = Array(7).fill(0);
     const dayCounts = Array(7).fill(0);
 
@@ -275,7 +448,7 @@ function App() {
     });
 
     return { chartData: weeklyScores.reverse(), comparisonData: comparison, bestDay, maxStreak };
-  }, [historyData]);
+  }, [historyData, language, t]);
 
   // Handle case where data for the current day might not exist yet
   // Eğer o gün için veri yoksa, varsayılan aktiviteleri 0 değerleriyle göster
@@ -301,6 +474,27 @@ function App() {
     };
     setHistoryData({ ...historyData, [currentDate]: [...currentActivities, newAct] });
     setNewName(''); setNewGoal(''); setNewWeeklyGoal('');
+  };
+
+  const handleSaveActivity = (e) => {
+    e.preventDefault();
+    if (!editingActivity) return;
+    const updated = currentActivities.map(a => a.id === editingActivity.id ? editingActivity : a);
+    setHistoryData({ ...historyData, [currentDate]: updated });
+    setEditingActivity(null);
+  };
+
+  const handleUpdateProfile = async (e) => {
+    e.preventDefault();
+    if (user) {
+      try {
+        await updateProfile(user, { displayName: newDisplayName, photoURL: newPhotoURL });
+        setUser({ ...user, displayName: newDisplayName, photoURL: newPhotoURL });
+        setIsProfileModalOpen(false);
+      } catch (error) {
+        console.error("Error updating profile: ", error);
+      }
+    }
   };
 
   // Streak (Seri) Hesaplama
@@ -369,7 +563,7 @@ function App() {
     return (
       <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh', flexDirection: 'column', gap: '20px', backgroundColor: 'var(--bg-main)' }}>
         <Loader size={48} className="spin" color="var(--brand-blue)" />
-        <p style={{color: 'var(--text-dim)'}}>Yükleniyor...</p>
+        <p style={{color: 'var(--text-dim)'}}>{t.loading}</p>
       </div>
     );
   }
@@ -383,56 +577,55 @@ function App() {
   }
 
   return (
-    <motion.div 
-      initial={{ opacity: 0 }} 
-      animate={{ opacity: 1 }} 
-      className="app-container"
-    >
-      
-      <div className="header-top">
-        <motion.div whileHover={{ scale: 1.05 }} className="streak-badge">
-          <Flame size={24} color={streak > 0 ? "#ef4444" : "#64748b"} />
-          <span style={{ color: streak > 0 ? "#ef4444" : "#64748b" }}>{streak} Günlük Seri</span>
-        </motion.div>
-        <div style={{ display: 'flex', gap: '10px' }}>
+    <div className="dashboard-layout">
+      {/* Sidebar (Kenar Çubuğu) */}
+      <nav className="sidebar">
+        <div className="sidebar-header" onClick={() => setActiveTab('dashboard')}>
+          <h1>LifeTrack</h1>
+          <p>OS</p>
+        </div>
+        
+        <div className="sidebar-menu">
+          <button className={`sidebar-btn ${activeTab === 'dashboard' ? 'active' : ''}`} onClick={() => setActiveTab('dashboard')}>
+            <LayoutDashboard size={22} /> <span>{t.dashboard}</span>
+          </button>
+          <button className={`sidebar-btn ${activeTab === 'focus' ? 'active' : ''}`} onClick={() => setActiveTab('focus')}>
+            <Target size={22} /> <span>{t.focus}</span>
+          </button>
+          <button className={`sidebar-btn ${activeTab === 'analytics' ? 'active' : ''}`} onClick={() => setActiveTab('analytics')}>
+            <BarChart3 size={22} /> <span>{t.analytics}</span>
+          </button>
+          <button className={`sidebar-btn ${activeTab === 'settings' ? 'active' : ''}`} onClick={() => setActiveTab('settings')}>
+            <Settings size={22} /> <span>{t.settings}</span>
+          </button>
+        </div>
+
+        <div className="sidebar-footer">
+          <button className="sidebar-btn" onClick={handleSignOut} style={{ color: '#ef4444' }}>
+            <LogOut size={22} /> <span>{t.logout}</span>
+          </button>
+        </div>
+      </nav>
+
+      <main className="main-content">
+        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="app-container">
+          <div className="header-top">
+          <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
+            <h2 className="header-title">LifeTrack OS</h2>
+            <motion.div whileHover={{ scale: 1.05 }} className="streak-badge">
+              <Flame size={20} color={streak > 0 ? "#ef4444" : "#64748b"} />
+              <span style={{ color: streak > 0 ? "#ef4444" : "#64748b", fontSize: '0.9rem' }}>{streak} {t.streak}</span>
+            </motion.div>
+          </div>
           {/* Kullanıcı Profili */}
-          <div className="user-profile">
+          <div className="user-profile" onClick={() => { setNewDisplayName(user.displayName || ''); setNewPhotoURL(user.photoURL || ''); setIsProfileModalOpen(true); }} style={{cursor: 'pointer'}} title={t.editProfile}>
+            <span className="user-name">{user.displayName || user.email?.split('@')[0]}</span>
             {user.photoURL ? (
               <img src={user.photoURL} alt="Profil" className="user-avatar" />
             ) : (
               <div className="user-avatar-placeholder">{user.email?.charAt(0).toUpperCase()}</div>
             )}
-            <span className="user-name">{user.displayName || user.email?.split('@')[0]}</span>
           </div>
-          
-          <button onClick={exportData} className="theme-toggle" title="Verileri İndir (JSON)">
-            <Download size={24} color="#8b5cf6" />
-          </button>
-          <button onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')} className="theme-toggle">
-            {theme === 'dark' ? <Sun size={24} color="#f59e0b"/> : <Moon size={24} color="#3b82f6"/>}
-          </button>
-          <button onClick={handleSignOut} className="theme-toggle" title="Çıkış Yap">
-            <LogOut size={24} color="#ef4444" />
-          </button>
-        </div>
-      </div>
-
-      <header>
-        <motion.h1 initial={{ y: -20 }} animate={{ y: 0 }}>LifeTrack OS</motion.h1>
-        <p className="subtitle"> Kişisel Analitik Panel</p>
-      </header>
-
-      {/* Tab Navigasyon */}
-      <div className="tab-nav">
-        <button className={`tab-btn ${activeTab === 'dashboard' ? 'active' : ''}`} onClick={() => setActiveTab('dashboard')}>
-          <LayoutDashboard size={18} /> Dashboard
-        </button>
-        <button className={`tab-btn ${activeTab === 'focus' ? 'active' : ''}`} onClick={() => setActiveTab('focus')}>
-          <Target size={18} /> Focus
-        </button>
-        <button className={`tab-btn ${activeTab === 'analytics' ? 'active' : ''}`} onClick={() => setActiveTab('analytics')}>
-          <BarChart3 size={18} /> Haftalık Analiz
-        </button>
       </div>
 
       <AnimatePresence mode='wait'>
@@ -444,19 +637,40 @@ function App() {
             exit={{ opacity: 0, y: -10 }}
             transition={{ duration: 0.2 }}
           >
+            {/* Günün Öncelikli Hedefi */}
+            <motion.div className="daily-goal-wrapper">
+              <div className={`daily-goal-container ${currentGoal.completed ? 'completed' : ''}`}>
+                <button 
+                  className={`daily-goal-checkbox ${currentGoal.completed ? 'active' : ''}`}
+                  onClick={toggleGoalCompletion}
+                  disabled={!isEditable}
+                >
+                  {currentGoal.completed && <Check size={20} color="white" strokeWidth={3} />}
+                </button>
+                <input 
+                  type="text" 
+                  className="daily-goal-input" 
+                  placeholder={`✨ ${t.dailyFocus}`}
+                  value={currentGoal.text} 
+                  onChange={(e) => handleGoalChange(e.target.value)}
+                  disabled={!isEditable}
+                />
+              </div>
+            </motion.div>
+
             <motion.div layout className="date-navigator">
-              <button className="date-btn" onClick={() => {const d = new Date(currentDate); d.setDate(d.getDate()-1); setCurrentDate(formatDate(d));}}><ChevronLeft size={24}/> <span className="date-btn-text">Dün</span></button>
+              <button className="date-btn" onClick={() => {const d = new Date(currentDate); d.setDate(d.getDate()-1); setCurrentDate(formatDate(d));}}><ChevronLeft size={24}/> <span className="date-btn-text">{t.yesterday}</span></button>
               <span className="date-display">{getDisplayDate(currentDate)}</span>
-              <button className="date-btn" onClick={() => {const d = new Date(currentDate); d.setDate(d.getDate()+1); setCurrentDate(formatDate(d));}}><span className="date-btn-text">Yarın</span> <ChevronRight size={24}/></button>
+              <button className="date-btn" onClick={() => {const d = new Date(currentDate); d.setDate(d.getDate()+1); setCurrentDate(formatDate(d));}}><span className="date-btn-text">{t.tomorrow}</span> <ChevronRight size={24}/></button>
               {!isEditable && (
-                <div style={{marginLeft: '10px', display: 'flex', alignItems: 'center', color: 'var(--text-dim)'}} title="Geçmiş kilitli">
+                <div style={{marginLeft: '10px', display: 'flex', alignItems: 'center', color: 'var(--text-dim)'}} title={t.locked}>
                   <Lock size={18} />
                 </div>
               )}
             </motion.div>
 
             <motion.div initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} className="mood-section">
-              <h3 style={{margin:0}}>Bugün Nasıl Hissediyorsun?</h3>
+              <h3 style={{margin:0}}>{t.howAreYou}</h3>
               <div className="mood-options">
                 {['😔', '😐', '😊', '🔥', '🚀'].map(e => (
                   <button key={e} disabled={!isEditable} className={`mood-btn ${moods[currentDate] === e ? 'active' : ''}`} onClick={() => isEditable && setMoods({...moods, [currentDate]: e})}>{e}</button>
@@ -478,6 +692,7 @@ function App() {
                     whileHover={{ y: -8, transition: { duration: 0.2 } }}
                     className="card"
                     draggable={isEditable}
+                    onClick={() => isEditable && setEditingActivity(act)}
                     onDragStart={(e) => e.dataTransfer.setData('text/plain', index)}
                     onDragOver={(e) => e.preventDefault()}
                     onDrop={(e) => {
@@ -491,13 +706,13 @@ function App() {
                       setHistoryData({ ...historyData, [currentDate]: newArr });
                     }}
                   >
-                    {isEditable && <button className="delete-btn" onClick={() => deleteActivity(act.id)}><X size={16}/></button>}
+                    {isEditable && <button className="delete-btn" onClick={(e) => { e.stopPropagation(); deleteActivity(act.id); }}><X size={16}/></button>}
                     <h3 style={{color: act.color, margin: '0 0 10px 0', fontSize: '1.1rem'}}>{act.name}</h3>
                     <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px'}}>
                       <div className="input-group" style={{margin: 0}}>
-                        <input type="number" className="value-input" value={act.value || ''} onChange={(e) => updateData(act.id, 'value', e.target.value)} disabled={!isEditable} />
+                        <input type="number" className="value-input" value={act.value || ''} onClick={(e) => e.stopPropagation()} onChange={(e) => updateData(act.id, 'value', e.target.value)} disabled={!isEditable} />
                         <span style={{color: 'var(--text-dim)', fontWeight: 'bold'}}>/</span>
-                        <input type="number" className="goal-input" value={act.goal || ''} onChange={(e) => updateData(act.id, 'goal', e.target.value)} disabled={!isEditable} />
+                        <input type="number" className="goal-input" value={act.goal || ''} onClick={(e) => e.stopPropagation()} onChange={(e) => updateData(act.id, 'goal', e.target.value)} disabled={!isEditable} />
                       </div>
                       <span style={{fontSize: '0.9rem', fontWeight: '800', color: act.color}}>%{Math.round(prog)}</span>
                     </div>
@@ -507,6 +722,7 @@ function App() {
                       <input 
                         type="number" 
                         value={act.weeklyGoal || ''} 
+                        onClick={(e) => e.stopPropagation()}
                         onChange={(e) => updateData(act.id, 'weeklyGoal', e.target.value)}
                         disabled={!isEditable}
                         style={{width: '60px', background: 'transparent', border: '1px solid var(--border-color)', borderRadius: '4px', color: 'var(--text-dim)', padding: '2px 5px', textAlign: 'center'}}
@@ -520,22 +736,22 @@ function App() {
             </div>
 
             {isEditable && <form className="add-form" onSubmit={addActivity}>
-              <input type="text" placeholder="Örn: Kitap Okuma (Sayfa)" value={newName} onChange={(e) => setNewName(e.target.value)} required />
-              <input type="number" placeholder="Günlük Hedef (Örn: 50)" value={newGoal} onChange={(e) => setNewGoal(e.target.value)} required min="1" />
-              <input type="number" placeholder="Haftalık Hedef" value={newWeeklyGoal} onChange={(e) => setNewWeeklyGoal(e.target.value)} min="1" />
-              <button type="submit" className="add-btn">Yeni Aktivite Ekle</button>
+              <input type="text" placeholder="Örn: Kitap Okuma" value={newName} onChange={(e) => setNewName(e.target.value)} required />
+              <input type="number" placeholder={t.dailyGoal} value={newGoal} onChange={(e) => setNewGoal(e.target.value)} required min="1" />
+              <input type="number" placeholder={t.weeklyGoal} value={newWeeklyGoal} onChange={(e) => setNewWeeklyGoal(e.target.value)} min="1" />
+              <button type="submit" className="add-btn">{t.newActivity}</button>
             </form>}
 
             <div className="chart-card">
-              <h2 style={{marginTop:0, marginBottom:'30px'}}>Haftalık Verimlilik (%)</h2>
+              <h2 style={{marginTop:0, marginBottom:'30px'}}>{t.weeklyEfficiency}</h2>
               <div style={{ width: '100%', height: 300 }}>
                 <ResponsiveContainer>
                   <LineChart data={generateChartData()}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="rgba(148, 163, 184, 0.2)" />
+                    <CartesianGrid strokeDasharray="3 3" stroke="var(--border-color)" />
                     <XAxis dataKey="name" stroke="var(--text-dim)" />
                     <YAxis stroke="var(--text-dim)" domain={[0, 100]} />
                     <Tooltip contentStyle={{backgroundColor: 'var(--card-bg)', border: '1px solid var(--border-color)', borderRadius: '8px', color: 'var(--text-main)'}} />
-                    <Line type="monotone" dataKey="Skor" stroke="#3b82f6" strokeWidth={4} activeDot={{r: 8}} />
+                    <Line type="monotone" dataKey="Skor" stroke={chartColor} strokeWidth={4} activeDot={{r: 8}} />
                   </LineChart>
                 </ResponsiveContainer>
               </div>
@@ -563,7 +779,7 @@ function App() {
                 {isFullScreen ? <Minimize size={24} /> : <Maximize size={24} />}
               </button>
               <div style={{marginBottom: '15px'}}>
-                <label style={{marginRight: '10px', fontWeight: 'bold', color: 'var(--text-main)'}}>Süre (dk):</label>
+                <label style={{marginRight: '10px', fontWeight: 'bold', color: 'var(--text-main)'}}>{t.duration}</label>
                 <input 
                   type="number" 
                   value={pomodoroDuration} 
@@ -579,8 +795,8 @@ function App() {
               </div>
               <div className="timer-display">{Math.floor(timeLeft/60)}:{(timeLeft%60).toString().padStart(2,'0')}</div>
               <div className="timer-controls">
-                <button className="timer-btn" style={{background:'#10b981'}} onClick={() => setIsActive(!isActive)}>{isActive ? 'DURDUR' : 'BAŞLAT'}</button>
-                <button className="timer-btn" style={{background:'#ef4444'}} onClick={() => {setIsActive(false); setTimeLeft((parseInt(pomodoroDuration) || 25)*60);}}>SIFIRLA</button>
+                <button className="timer-btn" style={{background:'#10b981'}} onClick={() => setIsActive(!isActive)}>{isActive ? t.stop : t.start}</button>
+                <button className="timer-btn" style={{background:'#ef4444'}} onClick={() => {setIsActive(false); setTimeLeft((parseInt(pomodoroDuration) || 25)*60);}}>{t.reset}</button>
               </div>
             </motion.div>
 
@@ -591,12 +807,12 @@ function App() {
                 animate={{ opacity: 1, y: 0 }}
                 className="todo-card"
               >
-                <h3 style={{margin: '0 0 20px 0', display:'flex', alignItems:'center', gap:'10px'}}><Check size={20} color="var(--brand-blue)"/> Günlük Görevler</h3>
+                <h3 style={{margin: '0 0 20px 0', display:'flex', alignItems:'center', gap:'10px'}}><Check size={20} color="var(--brand-blue)"/> {t.dailyTasks}</h3>
                 
                 <form onSubmit={addTodo} className="todo-form">
                   <input 
                     type="text" 
-                    placeholder="Yeni görev ekle..." 
+                    placeholder={t.newTask}
                     value={newTodo} 
                     onChange={(e) => setNewTodo(e.target.value)}
                   />
@@ -628,7 +844,7 @@ function App() {
                       <button onClick={() => deleteTodo(todo.id)} className="todo-delete"><Trash2 size={16}/></button>
                     </div>
                   ))}
-                  {todos.length === 0 && <p style={{textAlign:'center', color:'var(--text-dim)', fontStyle:'italic'}}>Henüz bir görev eklenmedi.</p>}
+                  {todos.length === 0 && <p style={{textAlign:'center', color:'var(--text-dim)', fontStyle:'italic'}}>{t.noTasks}</p>}
                 </div>
               </motion.div>
             )}
@@ -644,21 +860,21 @@ function App() {
             transition={{ duration: 0.2 }}
           >
             <div className="chart-card" style={{marginBottom: '20px'}}>
-              <h2 style={{marginTop:0, marginBottom:'30px'}}>Son 4 Haftalık Performans</h2>
+              <h2 style={{marginTop:0, marginBottom:'30px'}}>{t.performance4Weeks}</h2>
               <div style={{ width: '100%', height: 250 }}>
                 <ResponsiveContainer>
                   <AreaChart data={analysisData.chartData} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
                     <defs>
                       <linearGradient id="colorUv" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.8}/>
-                        <stop offset="95%" stopColor="#3b82f6" stopOpacity={0}/>
+                        <stop offset="5%" stopColor={chartColor} stopOpacity={0.8}/>
+                        <stop offset="95%" stopColor={chartColor} stopOpacity={0}/>
                       </linearGradient>
                     </defs>
                     <XAxis dataKey="name" stroke="var(--text-dim)" />
                     <YAxis stroke="var(--text-dim)" domain={[0, 100]} />
-                    <CartesianGrid strokeDasharray="3 3" stroke="rgba(148, 163, 184, 0.1)" />
+                    <CartesianGrid strokeDasharray="3 3" stroke="var(--border-color)" />
                     <Tooltip contentStyle={{backgroundColor: 'var(--card-bg)', border: '1px solid var(--border-color)', borderRadius: '8px', color: 'var(--text-main)'}} />
-                    <Area type="monotone" dataKey="Skor" stroke="#3b82f6" strokeWidth={3} fillOpacity={1} fill="url(#colorUv)" />
+                    <Area type="monotone" dataKey="Skor" stroke={chartColor} strokeWidth={3} fillOpacity={1} fill="url(#colorUv)" />
                   </AreaChart>
                 </ResponsiveContainer>
               </div>
@@ -667,12 +883,12 @@ function App() {
             <div className="stat-card-grid">
               {/* Rekor Seri Kartı */}
               <motion.div className="stat-card" whileHover={{ y: -5 }}>
-                  <h4 style={{color: '#f59e0b', margin: '0 0 5px 0'}}>Rekor Seri</h4>
+                  <h4 style={{color: '#f59e0b', margin: '0 0 5px 0'}}>{t.recordStreak}</h4>
                   <div className="stat-card-change" style={{color: '#f59e0b'}}>
                     <Trophy size={24}/>
-                    {analysisData.maxStreak} Gün
+                    {analysisData.maxStreak} {t.streak}
                   </div>
-                  <p className="stat-card-note">En uzun zincir</p>
+                  <p className="stat-card-note">{t.longestChain}</p>
               </motion.div>
 
               {analysisData.comparisonData.map(item => (
@@ -682,15 +898,15 @@ function App() {
                     {item.change > 0 ? <ArrowUp size={24}/> : item.change < 0 ? <ArrowDown size={24}/> : null}
                     {Math.abs(item.change)}%
                   </div>
-                  <p className="stat-card-note">vs geçen hafta</p>
+                  <p className="stat-card-note">{t.vsLastWeek}</p>
                 </motion.div>
               ))}
             </div>
 
             <div className="ai-insight-card">
-              <h3>Haftalık Analiz Raporu</h3>
+              <h3>{t.weeklyReport}</h3>
               <ul>
-                {analysisData.bestDay && <li>📅 İstatistiklere göre en verimli gününüz: <strong style={{color: 'var(--brand-blue)', marginLeft:'5px'}}>{analysisData.bestDay}</strong>. En zorlu işleri bu güne planlayabilirsiniz.</li>}
+                {analysisData.bestDay && <li>📅 {t.bestDay} <strong style={{color: 'var(--brand-blue)', marginLeft:'5px'}}>{analysisData.bestDay}</strong>{t.bestDaySuffix}</li>}
                 {analysisData.comparisonData.map(item => {
                   if (item.change > 15) {
                     return <li key={item.name}>🚀 <strong style={{color: item.color}}>{item.name}</strong> alanında harika bir sıçrama! Geçen haftaya göre %{item.change} daha üretkensiniz.</li>;
@@ -706,8 +922,165 @@ function App() {
             </div>
           </motion.div>
         )}
+
+        {activeTab === 'settings' && (
+          <motion.div 
+            key="settings"
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -10 }}
+            transition={{ duration: 0.2 }}
+          >
+            <div className="card">
+              <h2 style={{marginTop: 0, marginBottom: '20px'}}>{t.appSettings}</h2>
+              <div className="settings-grid">
+                <button onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')} className="settings-btn">
+                  {theme === 'dark' ? <Sun size={24} color="#f59e0b"/> : <Moon size={24} color="#3b82f6"/>}
+                  <span>{t.changeTheme}</span>
+                </button>
+                <button onClick={exportData} className="settings-btn">
+                  <Download size={24} color="#8b5cf6" />
+                  <span>{t.downloadData}</span>
+                </button>
+                <button onClick={() => {
+                  const newState = !notifications;
+                  setNotifications(newState);
+                  localStorage.setItem('appNotifications', JSON.stringify(newState));
+                }} className="settings-btn">
+                  {notifications ? <Bell size={24} color="#10b981"/> : <BellOff size={24} color="#ef4444"/>}
+                  <span>{t.notifications}</span>
+                </button>
+                <button onClick={() => setLanguage(language === 'tr' ? 'en' : 'tr')} className="settings-btn">
+                  <Languages size={24} color="#f59e0b"/>
+                  <span>{t.language}: {language.toUpperCase()}</span>
+                </button>
+              </div>
+
+              <div style={{marginTop: '30px'}}>
+                <h3 style={{fontSize: '1rem', color: 'var(--text-dim)', marginBottom: '15px'}}>{t.colorTheme}</h3>
+                <div className="accent-color-grid">
+                  {accentColors.map(c => (
+                    <button
+                      key={c.value}
+                      className={`accent-color-btn ${accentColor === c.value ? 'active' : ''}`}
+                      style={{backgroundColor: c.value}}
+                      onClick={() => setAccentColor(c.value)}
+                      title={c.label}
+                    >
+                      {accentColor === c.value && <Check size={20} color="white" strokeWidth={3} />}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </motion.div>
+        )}
       </AnimatePresence>
-    </motion.div>
+
+      {/* Profil Modal */}
+      <AnimatePresence>
+        {isProfileModalOpen && (
+          <motion.div 
+            className="modal-overlay"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={() => setIsProfileModalOpen(false)}
+          >
+            <motion.div 
+              className="modal-content"
+              initial={{ scale: 0.8, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.8, opacity: 0 }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <button className="modal-close" onClick={() => setIsProfileModalOpen(false)}><X size={24}/></button>
+              <div style={{textAlign: 'center', marginBottom: '20px'}}>
+                {user.photoURL ? (
+                  <img src={user.photoURL} alt="Profil" className="modal-avatar" />
+                ) : (
+                  <div className="modal-avatar-placeholder">{user.email?.charAt(0).toUpperCase()}</div>
+                )}
+                <h2 style={{margin: '10px 0 5px 0'}}>{user.displayName || 'Kullanıcı'}</h2>
+                <p style={{color: 'var(--text-dim)', margin: 0}}>{user.email}</p>
+              </div>
+              
+              <form onSubmit={handleUpdateProfile} className="edit-form">
+                <div className="form-group">
+                    <label>{t.username}</label>
+                    <input type="text" value={newDisplayName} onChange={(e) => setNewDisplayName(e.target.value)} placeholder={t.username} />
+                </div>
+                <div className="form-group">
+                    <label>{t.photoUrl}</label>
+                    <input type="text" value={newPhotoURL} onChange={(e) => setNewPhotoURL(e.target.value)} placeholder="https://..." />
+                </div>
+                <button type="submit" className="add-btn" style={{width: '100%', marginTop: '10px'}}>{t.save}</button>
+              </form>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Aktivite Düzenleme Modalı */}
+      <AnimatePresence>
+        {editingActivity && (
+          <motion.div 
+            className="modal-overlay"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={() => setEditingActivity(null)}
+          >
+            <motion.div 
+              className="modal-content"
+              initial={{ scale: 0.8, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.8, opacity: 0 }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <button className="modal-close" onClick={() => setEditingActivity(null)}><X size={24}/></button>
+              <h2 style={{marginTop: 0, marginBottom: '20px'}}>{t.editActivity}</h2>
+              
+              <form onSubmit={handleSaveActivity} className="edit-form">
+                <div className="form-group">
+                    <label>{t.activityName}</label>
+                    <input type="text" value={editingActivity.name} onChange={(e) => setEditingActivity({...editingActivity, name: e.target.value})} required />
+                </div>
+                <div style={{display:'flex', gap:'15px'}}>
+                  <div className="form-group" style={{flex:1}}>
+                      <label>{t.dailyGoal}</label>
+                      <input type="number" value={editingActivity.goal} onChange={(e) => setEditingActivity({...editingActivity, goal: parseFloat(e.target.value)})} required />
+                  </div>
+                  <div className="form-group" style={{flex:1}}>
+                      <label>{t.weeklyGoal}</label>
+                      <input type="number" value={editingActivity.weeklyGoal} onChange={(e) => setEditingActivity({...editingActivity, weeklyGoal: parseFloat(e.target.value)})} />
+                  </div>
+                </div>
+                <div className="form-group">
+                    <label>{t.colorTheme}</label>
+                    <div style={{display:'flex', alignItems:'center', gap:'10px'}}>
+                      <input type="color" value={editingActivity.color} onChange={(e) => setEditingActivity({...editingActivity, color: e.target.value})} className="color-picker" />
+                      <span style={{color:'var(--text-dim)', fontSize:'0.9rem'}}>{editingActivity.color}</span>
+                    </div>
+                </div>
+                <div style={{display: 'flex', gap: '10px', marginTop: '10px'}}>
+                  <button 
+                    type="button" 
+                    onClick={() => { deleteActivity(editingActivity.id); setEditingActivity(null); }}
+                    style={{background: 'rgba(239, 68, 68, 0.1)', color: '#ef4444', border: '1px solid rgba(239, 68, 68, 0.2)', padding: '12px', borderRadius: '12px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center'}}
+                  >
+                    <Trash2 size={20}/>
+                  </button>
+                  <button type="submit" className="add-btn" style={{flex: 1, display:'flex', justifyContent:'center', gap:'10px'}}><Check size={20}/> {t.save}</button>
+                </div>
+              </form>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+        </motion.div>
+      </main>
+    </div>
   );
 }
 
