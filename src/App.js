@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { ChevronLeft, ChevronRight, X, Sun, Moon, Flame, Lock, Download, LogOut, Loader, LayoutDashboard, Target, BarChart3, Maximize, Minimize, ArrowUp, ArrowDown, Check, Trash2, Plus, Trophy, User, Settings, Bell, BellOff, Languages } from 'lucide-react';
+import { ChevronLeft, ChevronRight, X, Sun, Moon, Flame, Lock, Download, LogOut, Loader, LayoutDashboard, Target, BarChart3, Maximize, Minimize, ArrowUp, ArrowDown, Check, Trash2, Plus, Trophy, Settings, Bell, BellOff, Languages } from 'lucide-react';
 import { LineChart, Line, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { motion, AnimatePresence } from 'framer-motion';
 import confetti from 'canvas-confetti';
@@ -145,7 +145,7 @@ function App() {
   const [dailyGoals, setDailyGoals] = useState({});
   const [newTodo, setNewTodo] = useState('');
   const [activeTab, setActiveTab] = useState('dashboard');
-  const [currentTime, setCurrentTime] = useState(new Date());
+  //const [currentTime, setCurrentTime] = useState(new Date());
   
   const [newName, setNewName] = useState('');
   const [newGoal, setNewGoal] = useState('');
