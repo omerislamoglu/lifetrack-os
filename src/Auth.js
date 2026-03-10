@@ -25,12 +25,14 @@ export default function Auth() {
       }
       // Başarılı olursa App.js içindeki auth listener (onAuthStateChanged) durumu yakalayacaktır.
     } catch (err) {
+      console.error("Auth Hatası:", err);
       let msg = err.message;
       if (msg.includes('auth/invalid-email')) msg = 'Geçersiz e-posta adresi.';
       else if (msg.includes('auth/user-not-found')) msg = 'Kullanıcı bulunamadı.';
       else if (msg.includes('auth/wrong-password')) msg = 'Hatalı şifre.';
       else if (msg.includes('auth/email-already-in-use')) msg = 'Bu e-posta zaten kullanımda.';
       else if (msg.includes('auth/weak-password')) msg = 'Şifre çok zayıf (en az 6 karakter).';
+      else if (msg.includes('auth/api-key-not-valid')) msg = 'Firebase API anahtarı geçersiz. Lütfen firebase.js dosyasındaki yapılandırma ayarlarını kontrol edin.';
       else if (msg.includes('auth/network-request-failed')) msg = 'Bağlantı hatası. İnternet bağlantınızı veya Firebase yapılandırma ayarlarınızı (firebase.js) kontrol edin.';
       setError(msg);
     } finally {
@@ -46,7 +48,9 @@ export default function Auth() {
       await signInWithPopup(auth, provider);
       // Başarılı olursa App.js yakalar
     } catch (err) {
+      console.error("Google Login Hatası:", err);
       let msg = err.message;
+      if (msg.includes('auth/api-key-not-valid')) msg = 'Firebase API anahtarı geçersiz. Lütfen firebase.js dosyasındaki yapılandırma ayarlarını kontrol edin.';
       if (msg.includes('auth/network-request-failed')) msg = 'Bağlantı hatası. İnternet bağlantınızı veya Firebase yapılandırma ayarlarınızı (firebase.js) kontrol edin.';
       setError(msg);
       setLoading(false);
