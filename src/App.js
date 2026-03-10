@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Book, Dumbbell, Terminal, ChevronLeft, ChevronRight, X, Sun, Moon, Play, Pause, RotateCcw, Flame, Lock, Download } from 'lucide-react';
+import { ChevronLeft, ChevronRight, X, Sun, Moon, Flame, Lock, Download } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import './App.css';
 
