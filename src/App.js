@@ -1,7 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { ChevronLeft, ChevronRight, X, Sun, Moon, Flame, Lock, Download } from 'lucide-react';
+import { ChevronLeft, ChevronRight, X, Sun, Moon, Flame, Lock, Download, LogOut, Loader } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import './App.css';
+import Auth from './Auth';
+import { auth, db } from './firebase';
+import { onAuthStateChanged, signOut } from 'firebase/auth';
+import { doc, getDoc, setDoc } from 'firebase/firestore';
 
 const defaultActivities = [
   { id: 1, name: 'Ders (Saat)', iconName: 'Book', value: 0, goal: 6, weeklyGoal: 42, color: '#3b82f6' },
@@ -23,10 +27,12 @@ const getDisplayDate = (dateString) => {
 };
 
 function App() {
+  const [user, setUser] = useState(null);
+  const [authLoading, setAuthLoading] = useState(true);
   const [currentDate, setCurrentDate] = useState(formatDate(new Date()));
   const [theme, setTheme] = useState(() => localStorage.getItem('appTheme') || 'dark');
-  const [historyData, setHistoryData] = useState(() => JSON.parse(localStorage.getItem('saasLifeTrack')) || { [formatDate(new Date())]: defaultActivities });
-  const [moods, setMoods] = useState(() => JSON.parse(localStorage.getItem('moodTracker')) || {});
+  const [historyData, setHistoryData] = useState({});
+  const [moods, setMoods] = useState({});
   
   const [newName, setNewName] = useState('');
   const [newGoal, setNewGoal] = useState('');
@@ -39,12 +45,49 @@ function App() {
 
   const isEditable = currentDate === formatDate(new Date());
 
+  // Firebase Auth Listener & Data Loading
   useEffect(() => {
-    localStorage.setItem('saasLifeTrack', JSON.stringify(historyData));
-    localStorage.setItem('moodTracker', JSON.stringify(moods));
+    const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
+      if (currentUser) {
+        setUser(currentUser);
+        const userDocRef = doc(db, 'users', currentUser.uid);
+        const docSnap = await getDoc(userDocRef);
+        if (docSnap.exists()) {
+          const data = docSnap.data();
+          setHistoryData(data.historyData || { [formatDate(new Date())]: defaultActivities });
+          setMoods(data.moods || {});
+        } else {
+          // New user, initialize with default data for today
+          setHistoryData({ [formatDate(new Date())]: defaultActivities });
+          setMoods({});
+        }
+      } else {
+        setUser(null);
+        setHistoryData({});
+        setMoods({});
+      }
+      setAuthLoading(false);
+    });
+    return () => unsubscribe();
+  }, []);
+
+  // Data Saving to Firestore
+  useEffect(() => {
+    if (!user || Object.keys(historyData).length === 0) return;
+
+    const debounceSave = setTimeout(async () => {
+      const userDocRef = doc(db, 'users', user.uid);
+      await setDoc(userDocRef, { historyData, moods }, { merge: true });
+    }, 1500); // Debounce to avoid too many writes
+
+    return () => clearTimeout(debounceSave);
+  }, [historyData, moods, user]);
+
+  // Theme persistence
+  useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme);
     localStorage.setItem('appTheme', theme);
-  }, [historyData, moods, theme]);
+  }, [theme]);
 
   useEffect(() => {
     let interval = null;
@@ -63,7 +106,8 @@ function App() {
     return () => clearInterval(interval);
   }, [isActive, timeLeft]);
 
-  const currentActivities = historyData[currentDate] || defaultActivities.map(a => ({ ...a, value: 0 }));
+  // Handle case where data for the current day might not exist yet
+  const currentActivities = historyData[currentDate] || [];
 
   const updateData = (id, field, val) => {
     const updated = currentActivities.map(a => a.id === id ? { ...a, [field]: parseFloat(val) || 0 } : a);
@@ -141,6 +185,31 @@ function App() {
     document.body.removeChild(link);
   };
 
+  const handleSignOut = async () => {
+    try {
+      await signOut(auth);
+    } catch (error) {
+      console.error("Error signing out: ", error);
+    }
+  };
+
+  if (authLoading) {
+    return (
+      <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh', flexDirection: 'column', gap: '20px', backgroundColor: 'var(--bg-main)' }}>
+        <Loader size={48} className="spin" color="var(--brand-blue)" />
+        <p style={{color: 'var(--text-dim)'}}>Yükleniyor...</p>
+      </div>
+    );
+  }
+
+  if (!user) {
+    return (
+      <div data-theme={theme}>
+        <Auth />
+      </div>
+    );
+  }
+
   return (
     <div className="app-container">
       
@@ -155,6 +224,9 @@ function App() {
           </button>
           <button onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')} className="theme-toggle">
             {theme === 'dark' ? <Sun size={24} color="#f59e0b"/> : <Moon size={24} color="#3b82f6"/>}
+          </button>
+          <button onClick={handleSignOut} className="theme-toggle" title="Çıkış Yap">
+            <LogOut size={24} color="#ef4444" />
           </button>
         </div>
       </div>
