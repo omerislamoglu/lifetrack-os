@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Mail, Lock, Loader, LogIn, UserPlus } from 'lucide-react';
 import { auth } from './firebase';
-import { createUserWithEmailAndPassword, signInWithEmailAndPassword, GoogleAuthProvider, signInWithPopup } from 'firebase/auth';
+import { createUserWithEmailAndPassword, signInWithEmailAndPassword, GoogleAuthProvider, signInWithPopup, sendPasswordResetEmail } from 'firebase/auth';
 import './App.css'; // Stilleri App.css'den alıyoruz
 
 export default function Auth() {
@@ -9,6 +9,7 @@ export default function Auth() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
+  const [resetSent, setResetSent] = useState(false);
   const [error, setError] = useState('');
 
   const handleSubmit = async (e) => {
@@ -30,6 +31,7 @@ export default function Auth() {
       else if (msg.includes('auth/wrong-password')) msg = 'Hatalı şifre.';
       else if (msg.includes('auth/email-already-in-use')) msg = 'Bu e-posta zaten kullanımda.';
       else if (msg.includes('auth/weak-password')) msg = 'Şifre çok zayıf (en az 6 karakter).';
+      else if (msg.includes('auth/network-request-failed')) msg = 'Bağlantı hatası. İnternet bağlantınızı veya Firebase yapılandırma ayarlarınızı (firebase.js) kontrol edin.';
       setError(msg);
     } finally {
       setLoading(false);
@@ -44,8 +46,21 @@ export default function Auth() {
       await signInWithPopup(auth, provider);
       // Başarılı olursa App.js yakalar
     } catch (err) {
-      setError(err.message);
+      let msg = err.message;
+      if (msg.includes('auth/network-request-failed')) msg = 'Bağlantı hatası. İnternet bağlantınızı veya Firebase yapılandırma ayarlarınızı (firebase.js) kontrol edin.';
+      setError(msg);
       setLoading(false);
+    }
+  };
+
+  const handleResetPassword = async () => {
+    if (!email) { setError('Şifre sıfırlama bağlantısı için lütfen e-posta adresinizi girin.'); return; }
+    try {
+      await sendPasswordResetEmail(auth, email);
+      setResetSent(true);
+      setError('');
+    } catch (err) {
+      setError(err.message);
     }
   };
 
@@ -60,7 +75,8 @@ export default function Auth() {
             </p>
         </div>
 
-        {error && <div style={{background: 'rgba(239,68,68,0.2)', color:'#ef4444', padding:'10px', borderRadius:'12px', marginBottom:'20px', fontSize:'0.9rem', border: '1px solid rgba(239,68,68,0.3)'}}>{error}</div>}
+        {error && <div style={{background: 'rgba(239,68,68,0.2)', color:'#ef4444', padding:'10px', borderRadius:'12px', marginBottom:'20px', fontSize:'0.9rem', border: '1px solid rgba(239,68,68,0.3)', textAlign: 'left'}}>{error}</div>}
+        {resetSent && <div style={{background: 'rgba(16, 185, 129, 0.2)', color:'#10b981', padding:'10px', borderRadius:'12px', marginBottom:'20px', fontSize:'0.9rem', border: '1px solid rgba(16, 185, 129, 0.3)'}}>Şifre sıfırlama bağlantısı gönderildi!</div>}
 
         <form onSubmit={handleSubmit} className="auth-form">
             <div className="glass-input-group">
@@ -78,6 +94,10 @@ export default function Auth() {
                     value={password} onChange={(e) => setPassword(e.target.value)} required
                 />
             </div>
+
+            {isLogin && (
+              <div style={{textAlign: 'right', marginTop: '-10px'}}><button type="button" onClick={handleResetPassword} style={{background:'none', border:'none', color:'var(--text-dim)', fontSize:'0.85rem', cursor:'pointer', textDecoration:'underline'}}>Şifremi Unuttum</button></div>
+            )}
 
             <button type="submit" className="auth-btn" disabled={loading}>
                 {loading ? <Loader className="spin" size={20} /> : (isLogin ? <><LogIn size={20}/> Giriş Yap</> : <><UserPlus size={20}/> Kayıt Ol</>)}

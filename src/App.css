@@ -269,3 +269,9 @@ input::-webkit-outer-spin-button, input::-webkit-inner-spin-button { -webkit-app
   transition: 0.2s;
 }
 .google-btn:hover { background: #f1f5f9; transform: translateY(-2px); }
+
+/* Kullanıcı Profili */
+.user-profile { display: flex; align-items: center; gap: 10px; margin-right: 10px; padding: 5px 10px; background: var(--card-bg); border-radius: 30px; border: 1px solid var(--border-color); }
+.user-avatar { width: 32px; height: 32px; border-radius: 50%; border: 2px solid var(--brand-blue); object-fit: cover; }
+.user-avatar-placeholder { width: 32px; height: 32px; border-radius: 50%; background: var(--brand-blue); color: white; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 1rem; }
+.user-name { font-weight: 600; font-size: 0.9rem; color: var(--text-main); max-width: 150px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }

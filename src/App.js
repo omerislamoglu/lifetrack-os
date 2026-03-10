@@ -219,6 +219,16 @@ function App() {
           <span style={{ color: streak > 0 ? "#ef4444" : "#64748b" }}>{streak} Günlük Seri</span>
         </div>
         <div style={{ display: 'flex', gap: '10px' }}>
+          {/* Kullanıcı Profili */}
+          <div className="user-profile">
+            {user.photoURL ? (
+              <img src={user.photoURL} alt="Profil" className="user-avatar" />
+            ) : (
+              <div className="user-avatar-placeholder">{user.email?.charAt(0).toUpperCase()}</div>
+            )}
+            <span className="user-name">{user.displayName || user.email?.split('@')[0]}</span>
+          </div>
+          
           <button onClick={exportData} className="theme-toggle" title="Verileri İndir (JSON)">
             <Download size={24} color="#8b5cf6" />
           </button>
