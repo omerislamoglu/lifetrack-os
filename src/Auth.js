@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Mail, Lock, Loader, LogIn, UserPlus } from 'lucide-react';
 import { auth } from './firebase';
+import { motion } from 'framer-motion';
 import { createUserWithEmailAndPassword, signInWithEmailAndPassword, GoogleAuthProvider, signInWithPopup, sendPasswordResetEmail } from 'firebase/auth';
 import './App.css'; // Stilleri App.css'den alıyoruz
 
@@ -70,7 +71,12 @@ export default function Auth() {
 
   return (
     <div className="auth-wrapper">
-      <div className="auth-card">
+      <motion.div 
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.5 }}
+        className="auth-card"
+      >
         <div className="auth-header">
             <h1>LifeTrack OS</h1>
             <h2>{isLogin ? 'Hoş Geldiniz' : 'Hesap Oluştur'}</h2>
@@ -124,7 +130,7 @@ export default function Auth() {
             {isLogin ? 'Hesabın yok mu? ' : 'Zaten hesabın var mı? '}
             <button onClick={() => setIsLogin(!isLogin)}>{isLogin ? 'Kayıt Ol' : 'Giriş Yap'}</button>
         </div>
-      </div>
+      </motion.div>
     </div>
   );
 }

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { ChevronLeft, ChevronRight, X, Sun, Moon, Flame, Lock, Download, LogOut, Loader } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import { motion, AnimatePresence } from 'framer-motion';
 import './App.css';
 import Auth from './Auth';
 import { auth, db } from './firebase';
@@ -240,13 +241,17 @@ function App() {
   }
 
   return (
-    <div className="app-container">
+    <motion.div 
+      initial={{ opacity: 0 }} 
+      animate={{ opacity: 1 }} 
+      className="app-container"
+    >
       
       <div className="header-top">
-        <div className="streak-badge">
+        <motion.div whileHover={{ scale: 1.05 }} className="streak-badge">
           <Flame size={24} color={streak > 0 ? "#ef4444" : "#64748b"} />
           <span style={{ color: streak > 0 ? "#ef4444" : "#64748b" }}>{streak} Günlük Seri</span>
-        </div>
+        </motion.div>
         <div style={{ display: 'flex', gap: '10px' }}>
           {/* Kullanıcı Profili */}
           <div className="user-profile">
@@ -271,11 +276,11 @@ function App() {
       </div>
 
       <header>
-        <h1>LifeTrack OS</h1>
+        <motion.h1 initial={{ y: -20 }} animate={{ y: 0 }}>LifeTrack OS</motion.h1>
         <p className="subtitle"> Kişisel Analitik Panel</p>
       </header>
 
-      <div className="date-navigator">
+      <motion.div layout className="date-navigator">
         <button className="date-btn" onClick={() => {const d = new Date(currentDate); d.setDate(d.getDate()-1); setCurrentDate(formatDate(d));}}><ChevronLeft size={24}/> <span className="date-btn-text">Dün</span></button>
         <span className="date-display">{getDisplayDate(currentDate)}</span>
         <button className="date-btn" onClick={() => {const d = new Date(currentDate); d.setDate(d.getDate()+1); setCurrentDate(formatDate(d));}}><span className="date-btn-text">Yarın</span> <ChevronRight size={24}/></button>
@@ -284,9 +289,9 @@ function App() {
             <Lock size={18} />
           </div>
         )}
-      </div>
+      </motion.div>
 
-      <div className="pomodoro-card">
+      <motion.div whileHover={{ y: -5 }} className="pomodoro-card">
         <div style={{marginBottom: '15px'}}>
           <label style={{marginRight: '10px', fontWeight: 'bold', color: 'var(--text-main)'}}>Süre (dk):</label>
           <input 
@@ -307,23 +312,29 @@ function App() {
           <button className="timer-btn" style={{background:'#10b981'}} onClick={() => setIsActive(!isActive)}>{isActive ? 'DURDUR' : 'BAŞLAT'}</button>
           <button className="timer-btn" style={{background:'#ef4444'}} onClick={() => {setIsActive(false); setTimeLeft((parseInt(pomodoroDuration) || 25)*60);}}>SIFIRLA</button>
         </div>
-      </div>
+      </motion.div>
 
-      <div className="mood-section">
+      <motion.div initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} className="mood-section">
         <h3 style={{margin:0}}>Bugün Nasıl Hissediyorsun?</h3>
         <div className="mood-options">
           {['😔', '😐', '😊', '🔥', '🚀'].map(e => (
             <button key={e} disabled={!isEditable} className={`mood-btn ${moods[currentDate] === e ? 'active' : ''}`} onClick={() => isEditable && setMoods({...moods, [currentDate]: e})}>{e}</button>
           ))}
         </div>
-      </div>
+      </motion.div>
 
       <div className="grid">
+        <AnimatePresence mode='popLayout'>
         {currentActivities.map((act, index) => {
           const prog = Math.min((act.value / (act.goal || 1)) * 100, 100);
           return (
-            <div 
+            <motion.div 
               key={act.id} 
+              layout
+              initial={{ opacity: 0, scale: 0.9 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.9 }}
+              whileHover={{ y: -8, transition: { duration: 0.2 } }}
               className="card"
               draggable={isEditable}
               onDragStart={(e) => e.dataTransfer.setData('text/plain', index)}
@@ -361,9 +372,10 @@ function App() {
                   placeholder="-"
                 />
               </div>
-            </div>
+            </motion.div>
           )
         })}
+        </AnimatePresence>
       </div>
 
       {isEditable && <form className="add-form" onSubmit={addActivity}>
@@ -387,7 +399,7 @@ function App() {
           </ResponsiveContainer>
         </div>
       </div>
-    </div>
+    </motion.div>
   );
 }
 
