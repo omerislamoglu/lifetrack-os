@@ -47,28 +47,45 @@ function App() {
 
   // Firebase Auth Listener & Data Loading
   useEffect(() => {
+    // Güvenlik Zaman Aşımı: 5 saniye içinde yanıt gelmezse yüklemeyi durdur
+    const timeout = setTimeout(() => {
+      console.warn("Firebase yanıt vermedi, zaman aşımı uygulandı.");
+      setAuthLoading(false);
+    }, 5000);
+
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
-      if (currentUser) {
-        setUser(currentUser);
-        const userDocRef = doc(db, 'users', currentUser.uid);
-        const docSnap = await getDoc(userDocRef);
-        if (docSnap.exists()) {
-          const data = docSnap.data();
-          setHistoryData(data.historyData || { [formatDate(new Date())]: defaultActivities });
-          setMoods(data.moods || {});
+      console.log("Auth durumu kontrol ediliyor...");
+      try {
+        if (currentUser) {
+          setUser(currentUser);
+          const userDocRef = doc(db, 'users', currentUser.uid);
+          const docSnap = await getDoc(userDocRef);
+          if (docSnap.exists()) {
+            const data = docSnap.data();
+            setHistoryData(data.historyData || { [formatDate(new Date())]: defaultActivities });
+            setMoods(data.moods || {});
+          } else {
+            // New user, initialize with default data for today
+            setHistoryData({ [formatDate(new Date())]: defaultActivities });
+            setMoods({});
+          }
         } else {
-          // New user, initialize with default data for today
-          setHistoryData({ [formatDate(new Date())]: defaultActivities });
+          setUser(null);
+          setHistoryData({});
           setMoods({});
         }
-      } else {
-        setUser(null);
-        setHistoryData({});
-        setMoods({});
+      } catch (error) {
+        console.error("Firebase veri yükleme hatası:", error);
+      } finally {
+        clearTimeout(timeout);
+        setAuthLoading(false);
       }
-      setAuthLoading(false);
     });
-    return () => unsubscribe();
+
+    return () => {
+      unsubscribe();
+      clearTimeout(timeout);
+    };
   }, []);
 
   // Data Saving to Firestore
@@ -106,8 +123,20 @@ function App() {
     return () => clearInterval(interval);
   }, [isActive, timeLeft]);
 
+  // Tarayıcı sekmesinde (Title) kalan süreyi göster
+  useEffect(() => {
+    if (isActive && timeLeft > 0) {
+      const mins = Math.floor(timeLeft / 60);
+      const secs = (timeLeft % 60).toString().padStart(2, '0');
+      document.title = `(${mins}:${secs}) LifeTrack OS`;
+    } else {
+      document.title = 'Daily Flow | Productivity Dashboard';
+    }
+  }, [isActive, timeLeft]);
+
   // Handle case where data for the current day might not exist yet
-  const currentActivities = historyData[currentDate] || [];
+  // Eğer o gün için veri yoksa, varsayılan aktiviteleri 0 değerleriyle göster
+  const currentActivities = historyData[currentDate] || defaultActivities.map(a => ({ ...a, value: 0 }));
 
   const updateData = (id, field, val) => {
     const updated = currentActivities.map(a => a.id === id ? { ...a, [field]: parseFloat(val) || 0 } : a);
@@ -311,15 +340,17 @@ function App() {
               }}
             >
               {isEditable && <button className="delete-btn" onClick={() => deleteActivity(act.id)}><X size={16}/></button>}
-              <h3 style={{color: act.color, margin: '0 0 15px 0'}}>{act.name}</h3>
-              <div className="input-group">
-                <input type="number" className="value-input" value={act.value} onChange={(e) => updateData(act.id, 'value', e.target.value)} disabled={!isEditable} />
-                <span style={{fontWeight:'bold', fontSize:'1.2rem'}}>/</span>
-                <input type="number" className="goal-input" value={act.goal} onChange={(e) => updateData(act.id, 'goal', e.target.value)} disabled={!isEditable} />
+              <h3 style={{color: act.color, margin: '0 0 10px 0', fontSize: '1.1rem'}}>{act.name}</h3>
+              <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px'}}>
+                <div className="input-group" style={{margin: 0}}>
+                  <input type="number" className="value-input" value={act.value || ''} onChange={(e) => updateData(act.id, 'value', e.target.value)} disabled={!isEditable} />
+                  <span style={{color: 'var(--text-dim)', fontWeight: 'bold'}}>/</span>
+                  <input type="number" className="goal-input" value={act.goal || ''} onChange={(e) => updateData(act.id, 'goal', e.target.value)} disabled={!isEditable} />
+                </div>
+                <span style={{fontSize: '0.9rem', fontWeight: '800', color: act.color}}>%{Math.round(prog)}</span>
               </div>
               <div className="progress-container"><div className="progress-bar" style={{width: `${prog}%`, backgroundColor: act.color}}></div></div>
-              <p style={{textAlign:'right', fontSize: '0.85rem', color: 'var(--text-dim)', margin:'8px 0 0 0', fontWeight:'bold'}}>%{Math.round(prog)} tamamlandı</p>
-              <div style={{marginTop: '10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.8rem', color: 'var(--text-dim)'}}>
+              <div style={{marginTop: '15px', paddingTop: '10px', borderTop: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.75rem', color: 'var(--text-dim)'}}>
                 <span>Haftalık Hedef:</span>
                 <input 
                   type="number" 
