@@ -165,9 +165,9 @@ function App() {
       </header>
 
       <div className="date-navigator">
-        <button className="date-btn" onClick={() => {const d = new Date(currentDate); d.setDate(d.getDate()-1); setCurrentDate(formatDate(d));}}><ChevronLeft size={24}/> Dün</button>
+        <button className="date-btn" onClick={() => {const d = new Date(currentDate); d.setDate(d.getDate()-1); setCurrentDate(formatDate(d));}}><ChevronLeft size={24}/> <span className="date-btn-text">Dün</span></button>
         <span className="date-display">{getDisplayDate(currentDate)}</span>
-        <button className="date-btn" onClick={() => {const d = new Date(currentDate); d.setDate(d.getDate()+1); setCurrentDate(formatDate(d));}}>Yarın <ChevronRight size={24}/></button>
+        <button className="date-btn" onClick={() => {const d = new Date(currentDate); d.setDate(d.getDate()+1); setCurrentDate(formatDate(d));}}><span className="date-btn-text">Yarın</span> <ChevronRight size={24}/></button>
         {!isEditable && (
           <div style={{marginLeft: '10px', display: 'flex', alignItems: 'center', color: 'var(--text-dim)'}} title="Geçmiş kilitli">
             <Lock size={18} />
