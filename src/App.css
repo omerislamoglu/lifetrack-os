@@ -237,3 +237,35 @@ input::-webkit-outer-spin-button, input::-webkit-inner-spin-button { -webkit-app
 
 @keyframes spin { 100% { transform: rotate(360deg); } }
 .spin { animation: spin 1s linear infinite; }
+
+/* Google Butonu ve Ayırıcı */
+.auth-separator {
+  display: flex;
+  align-items: center;
+  text-align: center;
+  color: var(--text-dim);
+  font-size: 0.9rem;
+}
+.auth-separator::before, .auth-separator::after {
+  content: '';
+  flex: 1;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+.auth-separator span { padding: 0 10px; }
+
+.google-btn {
+  background: white;
+  color: #1f2937;
+  padding: 12px;
+  border-radius: 12px;
+  border: none;
+  font-weight: 600;
+  font-size: 1rem;
+  cursor: pointer;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 12px;
+  transition: 0.2s;
+}
+.google-btn:hover { background: #f1f5f9; transform: translateY(-2px); }
