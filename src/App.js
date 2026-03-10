@@ -1,12 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { Book, Dumbbell, Terminal, ChevronLeft, ChevronRight, X, Sun, Moon, Play, Pause, RotateCcw, Flame } from 'lucide-react';
+import { Book, Dumbbell, Terminal, ChevronLeft, ChevronRight, X, Sun, Moon, Play, Pause, RotateCcw, Flame, Lock, Download } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import './App.css';
 
 const defaultActivities = [
-  { id: 1, name: 'Ders (Saat)', iconName: 'Book', value: 0, goal: 6, color: '#3b82f6' },
-  { id: 3, name: 'Spor (Dakika)', iconName: 'Dumbbell', value: 0, goal: 45, color: '#10b981' },
-  { id: 5, name: 'Kod (Satır)', iconName: 'Terminal', value: 0, goal: 150, color: '#8b5cf6' },
+  { id: 1, name: 'Ders (Saat)', iconName: 'Book', value: 0, goal: 6, weeklyGoal: 42, color: '#3b82f6' },
+  { id: 3, name: 'Spor (Dakika)', iconName: 'Dumbbell', value: 0, goal: 45, weeklyGoal: 315, color: '#10b981' },
+  { id: 5, name: 'Kod (Satır)', iconName: 'Terminal', value: 0, goal: 150, weeklyGoal: 1050, color: '#8b5cf6' },
 ];
 
 const formatDate = (date) => {
@@ -30,10 +30,14 @@ function App() {
   
   const [newName, setNewName] = useState('');
   const [newGoal, setNewGoal] = useState('');
+  const [newWeeklyGoal, setNewWeeklyGoal] = useState('');
 
   // Pomodoro
+  const [pomodoroDuration, setPomodoroDuration] = useState(25);
   const [timeLeft, setTimeLeft] = useState(25 * 60);
   const [isActive, setIsActive] = useState(false);
+
+  const isEditable = currentDate === formatDate(new Date());
 
   useEffect(() => {
     localStorage.setItem('saasLifeTrack', JSON.stringify(historyData));
@@ -45,7 +49,16 @@ function App() {
   useEffect(() => {
     let interval = null;
     if (isActive && timeLeft > 0) {
-      interval = setInterval(() => setTimeLeft(prev => prev - 1), 1000);
+      interval = setInterval(() => {
+        setTimeLeft(prev => {
+          if (prev <= 1) {
+            new Audio('https://actions.google.com/sounds/v1/alarms/beep_short.ogg').play().catch(() => {});
+            setIsActive(false);
+            return 0;
+          }
+          return prev - 1;
+        });
+      }, 1000);
     } else { clearInterval(interval); }
     return () => clearInterval(interval);
   }, [isActive, timeLeft]);
@@ -66,11 +79,12 @@ function App() {
     e.preventDefault();
     if (!newName || !newGoal) return;
     const newAct = {
-      id: Date.now(), name: newName, iconName: 'Terminal', value: 0, goal: parseFloat(newGoal),
+      id: Date.now(), name: newName, iconName: 'Terminal', value: 0, goal: parseFloat(newGoal), 
+      weeklyGoal: parseFloat(newWeeklyGoal) || (parseFloat(newGoal) * 7),
       color: '#' + Math.floor(Math.random()*16777215).toString(16)
     };
     setHistoryData({ ...historyData, [currentDate]: [...currentActivities, newAct] });
-    setNewName(''); setNewGoal('');
+    setNewName(''); setNewGoal(''); setNewWeeklyGoal('');
   };
 
   // Streak (Seri) Hesaplama
@@ -115,6 +129,18 @@ function App() {
     });
   };
 
+  const exportData = () => {
+    const dataStr = JSON.stringify({ historyData, moods }, null, 2);
+    const blob = new Blob([dataStr], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `lifetrack-backup-${formatDate(new Date())}.json`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
   return (
     <div className="app-container">
       
@@ -123,27 +149,52 @@ function App() {
           <Flame size={24} color={streak > 0 ? "#ef4444" : "#64748b"} />
           <span style={{ color: streak > 0 ? "#ef4444" : "#64748b" }}>{streak} Günlük Seri</span>
         </div>
-        <button onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')} className="theme-toggle">
-          {theme === 'dark' ? <Sun size={24} color="#f59e0b"/> : <Moon size={24} color="#3b82f6"/>}
-        </button>
+        <div style={{ display: 'flex', gap: '10px' }}>
+          <button onClick={exportData} className="theme-toggle" title="Verileri İndir (JSON)">
+            <Download size={24} color="#8b5cf6" />
+          </button>
+          <button onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')} className="theme-toggle">
+            {theme === 'dark' ? <Sun size={24} color="#f59e0b"/> : <Moon size={24} color="#3b82f6"/>}
+          </button>
+        </div>
       </div>
 
       <header>
         <h1>LifeTrack OS</h1>
-        <p className="subtitle">Ömer'in Kişisel Analitik Paneli</p>
+        <p className="subtitle"> Kişisel Analitik Panel</p>
       </header>
 
       <div className="date-navigator">
         <button className="date-btn" onClick={() => {const d = new Date(currentDate); d.setDate(d.getDate()-1); setCurrentDate(formatDate(d));}}><ChevronLeft size={24}/> Dün</button>
         <span className="date-display">{getDisplayDate(currentDate)}</span>
         <button className="date-btn" onClick={() => {const d = new Date(currentDate); d.setDate(d.getDate()+1); setCurrentDate(formatDate(d));}}>Yarın <ChevronRight size={24}/></button>
+        {!isEditable && (
+          <div style={{marginLeft: '10px', display: 'flex', alignItems: 'center', color: 'var(--text-dim)'}} title="Geçmiş kilitli">
+            <Lock size={18} />
+          </div>
+        )}
       </div>
 
       <div className="pomodoro-card">
+        <div style={{marginBottom: '15px'}}>
+          <label style={{marginRight: '10px', fontWeight: 'bold', color: 'var(--text-main)'}}>Süre (dk):</label>
+          <input 
+            type="number" 
+            value={pomodoroDuration} 
+            onChange={(e) => {
+              const val = e.target.value;
+              setPomodoroDuration(val);
+              if (!isActive && val && parseInt(val) > 0) setTimeLeft(parseInt(val) * 60);
+            }}
+            style={{padding: '8px', borderRadius: '8px', border: '1px solid var(--border-color)', background: 'var(--input-bg)', color: 'var(--text-main)', width: '60px', textAlign: 'center', fontWeight: 'bold'}}
+            disabled={isActive}
+            min="1"
+          />
+        </div>
         <div className="timer-display">{Math.floor(timeLeft/60)}:{(timeLeft%60).toString().padStart(2,'0')}</div>
         <div className="timer-controls">
           <button className="timer-btn" style={{background:'#10b981'}} onClick={() => setIsActive(!isActive)}>{isActive ? 'DURDUR' : 'BAŞLAT'}</button>
-          <button className="timer-btn" style={{background:'#ef4444'}} onClick={() => {setIsActive(false); setTimeLeft(25*60);}}>SIFIRLA</button>
+          <button className="timer-btn" style={{background:'#ef4444'}} onClick={() => {setIsActive(false); setTimeLeft((parseInt(pomodoroDuration) || 25)*60);}}>SIFIRLA</button>
         </div>
       </div>
 
@@ -151,35 +202,63 @@ function App() {
         <h3 style={{margin:0}}>Bugün Nasıl Hissediyorsun?</h3>
         <div className="mood-options">
           {['😔', '😐', '😊', '🔥', '🚀'].map(e => (
-            <button key={e} className={`mood-btn ${moods[currentDate] === e ? 'active' : ''}`} onClick={() => setMoods({...moods, [currentDate]: e})}>{e}</button>
+            <button key={e} disabled={!isEditable} className={`mood-btn ${moods[currentDate] === e ? 'active' : ''}`} onClick={() => isEditable && setMoods({...moods, [currentDate]: e})}>{e}</button>
           ))}
         </div>
       </div>
 
       <div className="grid">
-        {currentActivities.map(act => {
+        {currentActivities.map((act, index) => {
           const prog = Math.min((act.value / (act.goal || 1)) * 100, 100);
           return (
-            <div key={act.id} className="card">
-              <button className="delete-btn" onClick={() => deleteActivity(act.id)}><X size={16}/></button>
+            <div 
+              key={act.id} 
+              className="card"
+              draggable={isEditable}
+              onDragStart={(e) => e.dataTransfer.setData('text/plain', index)}
+              onDragOver={(e) => e.preventDefault()}
+              onDrop={(e) => {
+                e.preventDefault();
+                if (!isEditable) return;
+                const dragIndex = parseInt(e.dataTransfer.getData('text/plain'));
+                if (dragIndex === index) return;
+                const newArr = [...currentActivities];
+                const [moved] = newArr.splice(dragIndex, 1);
+                newArr.splice(index, 0, moved);
+                setHistoryData({ ...historyData, [currentDate]: newArr });
+              }}
+            >
+              {isEditable && <button className="delete-btn" onClick={() => deleteActivity(act.id)}><X size={16}/></button>}
               <h3 style={{color: act.color, margin: '0 0 15px 0'}}>{act.name}</h3>
               <div className="input-group">
-                <input type="number" className="value-input" value={act.value} onChange={(e) => updateData(act.id, 'value', e.target.value)} />
+                <input type="number" className="value-input" value={act.value} onChange={(e) => updateData(act.id, 'value', e.target.value)} disabled={!isEditable} />
                 <span style={{fontWeight:'bold', fontSize:'1.2rem'}}>/</span>
-                <input type="number" className="goal-input" value={act.goal} onChange={(e) => updateData(act.id, 'goal', e.target.value)} />
+                <input type="number" className="goal-input" value={act.goal} onChange={(e) => updateData(act.id, 'goal', e.target.value)} disabled={!isEditable} />
               </div>
               <div className="progress-container"><div className="progress-bar" style={{width: `${prog}%`, backgroundColor: act.color}}></div></div>
               <p style={{textAlign:'right', fontSize: '0.85rem', color: 'var(--text-dim)', margin:'8px 0 0 0', fontWeight:'bold'}}>%{Math.round(prog)} tamamlandı</p>
+              <div style={{marginTop: '10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.8rem', color: 'var(--text-dim)'}}>
+                <span>Haftalık Hedef:</span>
+                <input 
+                  type="number" 
+                  value={act.weeklyGoal || ''} 
+                  onChange={(e) => updateData(act.id, 'weeklyGoal', e.target.value)}
+                  disabled={!isEditable}
+                  style={{width: '60px', background: 'transparent', border: '1px solid var(--border-color)', borderRadius: '4px', color: 'var(--text-dim)', padding: '2px 5px', textAlign: 'center'}}
+                  placeholder="-"
+                />
+              </div>
             </div>
           )
         })}
       </div>
 
-      <form className="add-form" onSubmit={addActivity}>
+      {isEditable && <form className="add-form" onSubmit={addActivity}>
         <input type="text" placeholder="Örn: Kitap Okuma (Sayfa)" value={newName} onChange={(e) => setNewName(e.target.value)} required />
         <input type="number" placeholder="Günlük Hedef (Örn: 50)" value={newGoal} onChange={(e) => setNewGoal(e.target.value)} required min="1" />
+        <input type="number" placeholder="Haftalık Hedef" value={newWeeklyGoal} onChange={(e) => setNewWeeklyGoal(e.target.value)} min="1" />
         <button type="submit" className="add-btn">Yeni Aktivite Ekle</button>
-      </form>
+      </form>}
 
       <div className="chart-card">
         <h2 style={{marginTop:0, marginBottom:'30px'}}>Haftalık Verimlilik (%)</h2>
