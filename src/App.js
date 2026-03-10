@@ -263,10 +263,6 @@ function App() {
   }, [isActive, timeLeft]);
 
   // Dijital Saat
-  useEffect(() => {
-    const timer = setInterval(() => setCurrentTime(new Date()), 1000);
-    return () => clearInterval(timer);
-  }, []);
 
   // Tarayıcı sekmesinde (Title) kalan süreyi göster
   useEffect(() => {
