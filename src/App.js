@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useMemo } from 'react';
-import { ChevronLeft, ChevronRight, X, Sun, Moon, Flame, Lock, Download, LogOut, Loader, LayoutDashboard, Target, BarChart3, Maximize, Minimize, ArrowUp, ArrowDown, Check, Trash2, Plus, Trophy, Settings, Bell, BellOff, Languages } from 'lucide-react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { ChevronLeft, ChevronRight, X, Sun, Moon, Flame, Lock, Download, LogOut, Loader, LayoutDashboard, Target, BarChart3, Maximize, Minimize, ArrowUp, ArrowDown, Check, Trash2, Plus, Trophy, User, Settings, Bell, BellOff, Languages, Sparkles } from 'lucide-react';
 import { LineChart, Line, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { motion, AnimatePresence } from 'framer-motion';
 import confetti from 'canvas-confetti';
@@ -74,7 +74,14 @@ const translations = {
     thisWeek: 'Bu Hafta',
     weeksAgo: 'H Önce',
     locked: 'Geçmiş kilitli',
-    completed: 'tamamlandı'
+    completed: 'tamamlandı',
+    aiMentor: 'AI Mentor',
+    askMentor: 'Mentoruna Sor',
+    analyzing: 'Veriler inceleniyor...',
+    reportJump: 'alanında harika bir sıçrama! Geçen haftaya göre %{change} daha üretkensiniz.',
+    reportDrop: 'alanında bir düşüş var. Geçen haftaya göre %{change} daha az. Odağınızı buraya çevirebilirsiniz.',
+    reportStable: 'alanında istikrarlı bir ilerleme kaydediyorsunuz.',
+    reportMaintain: 'alanında geçen haftaki performansınızı koruyorsunuz.'
   },
   en: {
     dashboard: 'Dashboard',
@@ -121,7 +128,14 @@ const translations = {
     thisWeek: 'This Week',
     weeksAgo: 'W Ago',
     locked: 'History locked',
-    completed: 'completed'
+    completed: 'completed',
+    aiMentor: 'AI Mentor',
+    askMentor: 'Ask Mentor',
+    analyzing: 'Analyzing data...',
+    reportJump: 'area saw a great jump! {change}% more productive than last week.',
+    reportDrop: 'area saw a drop. {change}% less than last week. You might want to focus here.',
+    reportStable: 'area shows steady progress.',
+    reportMaintain: 'area performance is maintained from last week.'
   }
 };
 
@@ -163,6 +177,13 @@ function App() {
   const [notifications, setNotifications] = useState(() => JSON.parse(localStorage.getItem('appNotifications')) ?? true);
   const [language, setLanguage] = useState(() => localStorage.getItem('appLanguage') || 'tr');
   const [accentColor, setAccentColor] = useState(() => localStorage.getItem('appAccentColor') || '#3b82f6');
+  const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
+  const [aiAdvice, setAiAdvice] = useState('');
+  const [isAiLoading, setIsAiLoading] = useState(false);
+  const [aiAnalysisResult, setAiAnalysisResult] = useState(null);
+  const [activeCardIndex, setActiveCardIndex] = useState(0);
+  const gridRef = useRef(null);
+  const scrollTimeout = useRef(null);
 
   const isEditable = currentDate === formatDate(new Date());
   const t = translations[language];
@@ -244,6 +265,88 @@ function App() {
     document.documentElement.style.setProperty('--brand-blue', accentColor);
     localStorage.setItem('appAccentColor', accentColor);
   }, [accentColor]);
+
+  // Mobil cihaz algılama
+  useEffect(() => {
+    const handleResize = () => setIsMobile(window.innerWidth <= 768);
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
+  // AI Mentor text generation based on analysis result and language
+  useEffect(() => {
+    if (!aiAnalysisResult) {
+      return;
+    }
+
+    const { totalCode, totalStudy, totalSport, sportRatio, totalProductiveActivity } = aiAnalysisResult;
+    const userName = user?.displayName || (language === 'tr' ? 'Ömer' : 'User');
+    let advice = '';
+
+    if (language === 'tr') {
+      advice = `Merhaba ${userName}! Bu haftaki verilerini senin için analiz ettim. `;
+      if (totalProductiveActivity === 0 && totalSport === 0) {
+        advice += `Bu hafta pek aktif olmamışsın gibi görünüyor. Unutma, her büyük yolculuk küçük bir adımla başlar. Bugün hedeflerinden birine sadece 10 dakika ayırmaya ne dersin? Başlangıç yapmak en zorudur, sonrası gelecektir! 💪`;
+      } else {
+        if (totalCode > 0 && totalStudy > 0) {
+          if (totalCode > (totalStudy * 50) * 1.5) { 
+            advice += `Kodlama tutkun harika (${totalCode} satır)! Pratik becerilerini geliştirdiğini gösteriyor. Ancak akademik sorumluluklarını (Ders: ${totalStudy} saat) biraz gölgede bırakmış olabilirsin. İyi bir mühendis, teorik temelleri de sağlam tutmalıdır. `;
+          } else if (totalStudy * 50 > totalCode * 1.5) { 
+            advice += `Akademik çalışmalarına verdiğin önem (${totalStudy} saat) takdire şayan. Teorik bilgin seni ileri taşıyacaktır. Pratik kodlama (${totalCode} satır) tarafını da ihmal etmediğinden emin ol, ikisi bir bütün. `;
+          } else {
+            advice += `Ders ve pratik çalışmaların arasında güzel bir denge kurmuşsun. Bu harika bir strateji! `;
+          }
+        } else if (totalCode > 0) {
+          advice += `Bu hafta kodlamaya odaklanmışsın (${totalCode} satır). Pratik yapmak çok değerli! Akademik derslerini de programına ekleyerek teorik altyapını güçlendirebilirsin. `;
+        } else if (totalStudy > 0) {
+          advice += `Bu hafta derslerine odaklanmışsın (${totalStudy} saat). Teorik bilgini sağlamlaştırmak harika! Şimdi bu bilgiyi kodlama pratiğiyle pekiştirme zamanı. `;
+        }
+
+        if (totalSport === 0) {
+          advice += `Bu hafta hiç spor yapmamışsın. Uzun saatler bilgisayar başında kalan biri olarak, zihinsel berraklığın ve sağlığın için sporu hayatına dahil etmen kritik önem taşıyor. `;
+        } else if (sportRatio < 0.5) {
+          advice += `Ancak dikkatimi çeken bir nokta var: Fiziksel aktivite hedeflerinin oldukça altındasın (%${Math.round(sportRatio * 100)}). Unutma, zihin ve beden bir bütündür. Kısa bir yürüyüş bile zihinsel berraklığını artırabilir. `;
+        } else if (sportRatio > 1.2) {
+          advice += `Fiziksel sağlığına verdiğin önem etkileyici! Bu enerji, masanın başına oturduğunda sana büyük avantaj sağlayacaktır. `;
+        } else {
+          advice += `Fiziksel aktivite hedeflerini de dengeli bir şekilde sürdürüyorsun. Harika! `;
+        }
+        advice += `Genel olarak doğru yoldasın. Bu verileri kullanarak bir sonraki haftanı daha da verimli planlayabilirsin. Başarılar! 🚀`;
+      }
+    } else {
+      // English
+      advice = `Hello ${userName}! I've analyzed your data for this week. `;
+      if (totalProductiveActivity === 0 && totalSport === 0) {
+        advice += `It seems you haven't been very active this week. Remember, every great journey begins with a small step. How about dedicating just 10 minutes to one of your goals today? Starting is the hardest part, the rest will follow! 💪`;
+      } else {
+        if (totalCode > 0 && totalStudy > 0) {
+          if (totalCode > (totalStudy * 50) * 1.5) { 
+            advice += `Your passion for coding is great (${totalCode} lines)! It shows you're developing your practical skills. However, you might be overshadowing your academic responsibilities (Study: ${totalStudy} hours) a bit. A good engineer must also keep their theoretical foundations strong. `;
+          } else if (totalStudy * 50 > totalCode * 1.5) { 
+            advice += `Your dedication to academic studies (${totalStudy} hours) is admirable. Theoretical knowledge will carry you forward. Make sure not to neglect the practical coding side (${totalCode} lines), they go hand in hand. `;
+          } else {
+            advice += `You have established a nice balance between study and practical work. This is a great strategy! `;
+          }
+        } else if (totalCode > 0) {
+          advice += `You focused on coding this week (${totalCode} lines). Practice is invaluable! You can strengthen your theoretical background by adding academic studies to your schedule. `;
+        } else if (totalStudy > 0) {
+          advice += `You focused on your studies this week (${totalStudy} hours). Solidifying your theoretical knowledge is great! Now it's time to reinforce this knowledge with coding practice. `;
+        }
+        if (totalSport === 0) {
+          advice += `You haven't done any sports this week. As someone who spends long hours in front of a computer, incorporating sports into your life is critical for your mental clarity and health. `;
+        } else if (sportRatio < 0.5) {
+          advice += `However, one point caught my attention: You are well below your physical activity goals (%${Math.round(sportRatio * 100)}). Remember, mind and body are one. Even a short walk can increase your mental clarity. `;
+        } else if (sportRatio > 1.2) {
+          advice += `The importance you place on your physical health is impressive! This energy will give you a great advantage when you sit at your desk. `;
+        } else {
+          advice += `You are also maintaining your physical activity goals in a balanced way. Great! `;
+        }
+        advice += `Overall, you are on the right track. You can use this data to plan your next week even more efficiently. Good luck! 🚀`;
+      }
+    }
+    setAiAdvice(advice);
+    setIsAiLoading(false);
+  }, [aiAnalysisResult, language, user]);
 
   useEffect(() => {
     let interval = null;
@@ -446,6 +549,71 @@ function App() {
     return { chartData: weeklyScores.reverse(), comparisonData: comparison, bestDay, maxStreak };
   }, [historyData, language, t]);
 
+  const generateAiAdvice = async () => {
+    setIsAiLoading(true);
+    setAiAdvice('');
+    setAiAnalysisResult(null);
+
+    // 1. Veri Toplama (Son 7 Gün)
+    const today = new Date();
+    const last7Days = [];
+    for (let i = 0; i < 7; i++) {
+      const d = new Date();
+      d.setDate(today.getDate() - i);
+      last7Days.push(formatDate(d));
+    }
+
+    let totalCode = 0;
+    let totalStudy = 0;
+    let totalSport = 0;
+    let sportGoalTotal = 0;
+
+    last7Days.forEach(dateStr => {
+      const dayData = historyData[dateStr] || [];
+      dayData.forEach(act => {
+        if (act.name.toLowerCase().includes('kod')) totalCode += act.value;
+        if (act.name.toLowerCase().includes('ders')) totalStudy += act.value;
+        if (act.name.toLowerCase().includes('spor')) {
+            totalSport += act.value;
+            sportGoalTotal += (act.goal || 1);
+        }
+      });
+    });
+
+    // Simüle edilmiş API gecikmesi
+    await new Promise(resolve => setTimeout(resolve, 2500));
+
+    // 2. Prompt Engineering & Otomasyon Mantığı
+    // Gerçek bir API'ye gönderilecek prompt şuna benzerdi:
+    // `Benim adım Ömer. Bu haftaki verilerim şunlar: Kod: ${totalCode}, Ders: ${totalStudy}, Spor: ${totalSport}. Bir bilgisayar mühendisliği öğrencisi olarak bana üretkenlik, sağlık ve ders dengesi konusunda samimi ve profesyonel bir tavsiye ver.`
+
+    const sportRatio = sportGoalTotal > 0 ? (totalSport / sportGoalTotal) : 0;
+    const totalProductiveActivity = totalCode + totalStudy;
+    
+    setAiAnalysisResult({
+      totalCode,
+      totalStudy,
+      totalSport,
+      sportRatio,
+      totalProductiveActivity,
+    });
+  };
+
+  const handleScroll = () => {
+    if (gridRef.current) {
+        clearTimeout(scrollTimeout.current);
+        scrollTimeout.current = setTimeout(() => {
+            const cardWidth = gridRef.current.querySelector('.card')?.offsetWidth;
+            if (cardWidth) {
+                const gap = 15; // from css
+                const scrollLeft = gridRef.current.scrollLeft;
+                const index = Math.round(scrollLeft / (cardWidth + gap));
+                setActiveCardIndex(index);
+            }
+        }, 150);
+    }
+  };
+
   // Handle case where data for the current day might not exist yet
   // Eğer o gün için veri yoksa, varsayılan aktiviteleri 0 değerleriyle göster
   const currentActivities = historyData[currentDate] || defaultActivities.map(a => ({ ...a, value: 0 }));
@@ -604,7 +772,7 @@ function App() {
       </nav>
 
       <main className="main-content">
-        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="app-container">
+        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="app-container" style={{paddingTop: 'max(20px, env(safe-area-inset-top))'}}>
           <div className="header-top">
           <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
             <h2 className="header-title">LifeTrack OS</h2>
@@ -674,7 +842,7 @@ function App() {
               </div>
             </motion.div>
 
-            <div className="grid">
+            <div className="grid" ref={gridRef} onScroll={handleScroll}>
               <AnimatePresence mode='popLayout'>
               {currentActivities.map((act, index) => {
                 const prog = Math.min((act.value / (act.goal || 1)) * 100, 100);
@@ -688,6 +856,13 @@ function App() {
                     whileHover={{ y: -8, transition: { duration: 0.2 } }}
                     className="card"
                     draggable={isEditable}
+                    drag={isMobile ? "y" : false}
+                    dragConstraints={{ top: 0, bottom: 0 }}
+                    dragElastic={0.7}
+                    onDragEnd={(e, { offset }) => {
+                      // Mobilde yukarı kaydırınca sil (Yatay kaydırma navigasyon için kullanılıyor)
+                      if (offset.y < -100 && isEditable) deleteActivity(act.id);
+                    }}
                     onClick={() => isEditable && setEditingActivity(act)}
                     onDragStart={(e) => e.dataTransfer.setData('text/plain', index)}
                     onDragOver={(e) => e.preventDefault()}
@@ -729,6 +904,25 @@ function App() {
                 )
               })}
               </AnimatePresence>
+            </div>
+
+            <div className="pagination-dots">
+              {currentActivities.map((_, index) => (
+                  <div
+                      key={index}
+                      className={`dot ${index === activeCardIndex ? 'active' : ''}`}
+                      onClick={() => {
+                          if (gridRef.current) {
+                              const cardWidth = gridRef.current.querySelector('.card')?.offsetWidth;
+                              const gap = 15;
+                              gridRef.current.scrollTo({
+                                  left: index * (cardWidth + gap),
+                                  behavior: 'smooth'
+                              });
+                          }
+                      }}
+                  />
+              ))}
             </div>
 
             {isEditable && <form className="add-form" onSubmit={addActivity}>
@@ -816,10 +1010,21 @@ function App() {
                 </form>
 
                 <div className="todo-list">
+                  <AnimatePresence mode='popLayout'>
                   {todos.map((todo, index) => (
-                    <div 
+                    <motion.div 
                       key={todo.id} 
+                      layout
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, x: -100, transition: { duration: 0.2 } }}
                       className={`todo-item ${todo.completed ? 'completed' : ''}`}
+                      drag="x"
+                      dragConstraints={{ left: 0, right: 0 }}
+                      dragElastic={0.5}
+                      onDragEnd={(e, { offset }) => {
+                        if (Math.abs(offset.x) > 100) deleteTodo(todo.id);
+                      }}
                       draggable
                       onDragStart={(e) => e.dataTransfer.setData('todoIndex', index)}
                       onDragOver={(e) => e.preventDefault()}
@@ -838,8 +1043,9 @@ function App() {
                         <span>{todo.text}</span>
                       </div>
                       <button onClick={() => deleteTodo(todo.id)} className="todo-delete"><Trash2 size={16}/></button>
-                    </div>
+                    </motion.div>
                   ))}
+                  </AnimatePresence>
                   {todos.length === 0 && <p style={{textAlign:'center', color:'var(--text-dim)', fontStyle:'italic'}}>{t.noTasks}</p>}
                 </div>
               </motion.div>
@@ -899,19 +1105,46 @@ function App() {
               ))}
             </div>
 
+            {/* AI Mentor Bölümü */}
+            <div className="ai-mentor-card">
+              <div className="ai-header">
+                <Sparkles size={24} color={accentColor} />
+                <h3>{t.aiMentor}</h3>
+              </div>
+              
+              {!aiAdvice && !isAiLoading && (
+                <button className="ai-btn" onClick={generateAiAdvice} style={{backgroundColor: accentColor}}>
+                  {t.askMentor}
+                </button>
+              )}
+
+              {isAiLoading && (
+                <div className="ai-loading">
+                  <Loader size={24} className="spin" color={accentColor} />
+                  <span>{t.analyzing}</span>
+                </div>
+              )}
+
+              {aiAdvice && (
+                <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="ai-response">
+                  <p>{aiAdvice}</p>
+                </motion.div>
+              )}
+            </div>
+
             <div className="ai-insight-card">
               <h3>{t.weeklyReport}</h3>
               <ul>
                 {analysisData.bestDay && <li>📅 {t.bestDay} <strong style={{color: 'var(--brand-blue)', marginLeft:'5px'}}>{analysisData.bestDay}</strong>{t.bestDaySuffix}</li>}
                 {analysisData.comparisonData.map(item => {
                   if (item.change > 15) {
-                    return <li key={item.name}>🚀 <strong style={{color: item.color}}>{item.name}</strong> alanında harika bir sıçrama! Geçen haftaya göre %{item.change} daha üretkensiniz.</li>;
+                    return <li key={item.name}>🚀 <strong style={{color: item.color}}>{item.name}</strong> {t.reportJump.replace('{change}', item.change)}</li>;
                   } else if (item.change < -15) {
-                    return <li key={item.name}>📉 <strong style={{color: item.color}}>{item.name}</strong> alanında bir düşüş var. Geçen haftaya göre %{Math.abs(item.change)} daha az. Odağınızı buraya çevirebilirsiniz.</li>;
+                    return <li key={item.name}>📉 <strong style={{color: item.color}}>{item.name}</strong> {t.reportDrop.replace('{change}', Math.abs(item.change))}</li>;
                   } else if (item.change !== 0) {
-                    return <li key={item.name}>✨ <strong style={{color: item.color}}>{item.name}</strong> alanında istikrarlı bir ilerleme kaydediyorsunuz.</li>;
+                    return <li key={item.name}>✨ <strong style={{color: item.color}}>{item.name}</strong> {t.reportStable}</li>;
                   } else {
-                    return <li key={item.name}>🧘 <strong style={{color: item.color}}>{item.name}</strong> alanında geçen haftaki performansınızı koruyorsunuz.</li>;
+                    return <li key={item.name}>🧘 <strong style={{color: item.color}}>{item.name}</strong> {t.reportMaintain}</li>;
                   }
                 })}
               </ul>
