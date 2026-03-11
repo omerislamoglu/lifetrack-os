@@ -2,9 +2,13 @@
 
 /* Global Reset & Mobile Optimization */
 * {
-  -webkit-tap-highlight-color: transparent; /* Mobilde tıklama efektini kaldır */
+  -webkit-tap-highlight-color: transparent;
+  -webkit-touch-callout: none; /* iOS'te uzun basınca menü çıkmasını engelle */
+  user-select: none; /* Metin seçimini engelle (Uygulama hissi için) */
   box-sizing: border-box;
 }
+/* Sadece input ve textarea'larda metin seçimine izin ver */
+input, textarea { user-select: text; -webkit-user-select: text; }
 
 :root {
   --bg-main: #000000;
@@ -46,11 +50,12 @@ body {
     radial-gradient(at 20% 90%, rgba(236, 72, 153, 0.25) 0px, transparent 50%);
   background-attachment: fixed;
   overscroll-behavior-y: none;
+  overflow-x: hidden; /* Yatay kaydırmayı engelle */
 }
 
 /* App Container: Masaüstü ve Mobil için optimize edilmiş padding */
 .app-container { 
-  max-width: 1000px; 
+  max-width: 100%; 
   margin: 0 auto; 
   padding: max(20px, env(safe-area-inset-top)) max(20px, env(safe-area-inset-right)) 120px max(20px, env(safe-area-inset-left));
   width: 100%;
@@ -304,7 +309,7 @@ button, input { font-family: inherit; }
 }
 
 .header-content {
-  max-width: 1000px;
+  max-width: 100%; /* Tam genişlik */
   margin: 0 auto;
   padding: 0 max(20px, env(safe-area-inset-right)) 0 max(20px, env(safe-area-inset-left));
   display: flex; 
@@ -478,7 +483,7 @@ input::-webkit-outer-spin-button, input::-webkit-inner-spin-button { -webkit-app
     width: 100%; height: auto; position: fixed; bottom: 0; top: auto; left: 0;
     border-right: none; border-top: 1px solid var(--border-color);
     flex-direction: row; justify-content: space-around; padding: 10px;
-    padding-bottom: max(15px, env(safe-area-inset-bottom)); /* iOS Alt Bar Boşluğu */
+    padding-bottom: max(10px, env(safe-area-inset-bottom)); /* iOS Alt Bar Boşluğu */
     background: var(--sidebar-bg); z-index: 1000;
     box-shadow: 0 -5px 20px rgba(0,0,0,0.2);
   }
@@ -504,7 +509,8 @@ input::-webkit-outer-spin-button, input::-webkit-inner-spin-button { -webkit-app
   .sidebar-btn.active::before { display: none; }
 
   /* Header Mobile Adjustments */
-  .user-name { display: none; }
+  .user-name { display: none; } /* Mobilde ismi gizle */
+  .user-profile { padding: 5px; border-radius: 50%; width: 44px; height: 44px; justify-content: center; } /* Profil butonunu 44px yap */
   .header-title { font-size: 1.2rem; }
 
   /* Ana içerik padding'i, alt menünün altında kalmaması için ayarlandı */
@@ -512,6 +518,7 @@ input::-webkit-outer-spin-button, input::-webkit-inner-spin-button { -webkit-app
 
   .app-container {
     padding: max(15px, env(safe-area-inset-top)) 15px 20px;
+    padding-bottom: 120px;
   }
 
   /* Swipeable Cards (Mobile) */
@@ -565,6 +572,7 @@ input::-webkit-outer-spin-button, input::-webkit-inner-spin-button { -webkit-app
   .timer-display {
     font-size: 3.2rem;
   }
+  .timer-btn { min-width: 44px; min-height: 44px; } /* Touch Target Fix */
 
   .mood-section {
     flex-direction: column;
@@ -577,21 +585,25 @@ input::-webkit-outer-spin-button, input::-webkit-inner-spin-button { -webkit-app
   }
 
   /* Modalları Bottom Sheet'e Dönüştür */
-  .modal-overlay {
-    align-items: flex-end; /* Aşağı hizala */
-  }
+  /* Modal Overlay: Mobilde tam ekran */
+  .modal-overlay { align-items: flex-end; padding: 0; }
 
+  /* Modal Content: Bottom Sheet */
   .modal-content {
     width: 100%;
     max-width: 100%;
     border-radius: 24px 24px 0 0; /* Sadece üst köşeleri yuvarla */
-    padding: 30px 20px max(40px, env(safe-area-inset-bottom)); /* Alt güvenli alan */
+    padding: 20px 20px max(30px, env(safe-area-inset-bottom)); /* Alt güvenli alan */
     margin: 0;
     border: none;
     border-top: 1px solid var(--border-color);
     animation: slideUp 0.3s cubic-bezier(0.16, 1, 0.3, 1);
     max-height: 85vh;
     overflow-y: auto;
+  }
+  
+  .modal-close {
+    top: 15px; right: 15px; /* Kapat butonu konumu */
   }
 
   /* Giriş Ekranı Mobil Uyumu */
@@ -829,8 +841,36 @@ input::-webkit-outer-spin-button, input::-webkit-inner-spin-button { -webkit-app
   background: var(--card-bg); backdrop-filter: blur(16px);
   padding: 25px; border-radius: 24px; border: 1px solid var(--border-color);
 }
+.insight-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 15px;
+  border-bottom: 1px solid var(--border-color);
+  padding-bottom: 10px;
+}
+.insight-card-header h3 {
+  margin: 0;
+}
+.icon-btn {
+  background: transparent;
+  border: 1px solid var(--border-color);
+  color: var(--text-dim);
+  padding: 8px;
+  border-radius: 50%;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+}
+.icon-btn:hover {
+  background: var(--input-bg);
+  color: var(--text-main);
+  border-color: var(--brand-blue);
+}
 .ai-insight-card ul { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 15px; }
-.ai-insight-card li { font-size: 1rem; line-height: 1.5; display: flex; align-items: center; gap: 10px; }
+.ai-insight-card li { font-size: 1rem; line-height: 1.6; }
 
 /* To-Do List */
 .todo-card {
@@ -958,7 +998,37 @@ input::-webkit-outer-spin-button, input::-webkit-inner-spin-button { -webkit-app
   background: transparent; border: none; color: var(--text-dim); cursor: pointer; min-height: 44px; min-width: 44px;
 }
 .modal-avatar { width: 80px; height: 80px; border-radius: 50%; border: 3px solid var(--brand-blue); object-fit: cover; margin: 0 auto; display: block; }
-.modal-avatar-placeholder { width: 80px; height: 80px; border-radius: 50%; background: var(--brand-blue); color: white; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 2.5rem; margin: 0 auto; }
+.modal-avatar:hover { opacity: 0.8; }
+.modal-avatar-placeholder { width: 80px; height: 80px; border-radius: 50%; background: var(--brand-blue); color: white; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 2.5rem; margin: 0 auto; cursor: pointer; }
+
+/* Avatar Selection */
+.avatar-selector {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 15px;
+  overflow-x: auto;
+  padding: 4px 2px;
+  scrollbar-width: none; /* Firefox */
+  -webkit-overflow-scrolling: touch; /* iOS Smooth Scroll */
+}
+.avatar-selector::-webkit-scrollbar { display: none; }
+
+.avatar-option {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  border: 3px solid transparent;
+  cursor: pointer;
+  transition: transform 0.2s, border-color 0.2s;
+  flex-shrink: 0;
+}
+.avatar-option:hover { transform: scale(1.1); }
+.avatar-option.selected { border-color: var(--brand-blue); transform: scale(1.1); }
+
+/* Profile Modal Form */
+.modal-content .edit-form { gap: 10px; } /* Reduced gap */
+
+.modal-content .form-group { margin-bottom: 5px; }
 
 /* Profile Stats */
 .profile-stats-grid {
@@ -1035,6 +1105,7 @@ input::-webkit-outer-spin-button, input::-webkit-inner-spin-button { -webkit-app
 
 /* Scroll To Top Button */
 .scroll-to-top-btn {
+  /* Masaüstü konumu */
   position: fixed;
   bottom: 30px;
   right: 30px;
@@ -1090,3 +1161,63 @@ input::-webkit-outer-spin-button, input::-webkit-inner-spin-button { -webkit-app
 }
 .icon-picker-btn:hover { background: rgba(255, 255, 255, 0.1); color: var(--text-main); }
 .icon-picker-btn.active { border-color: var(--brand-blue); color: var(--brand-blue); background: rgba(59, 130, 246, 0.1); }
+
+/* Idle Screen Saver */
+.idle-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background: rgba(0, 0, 0, 0.95);
+  backdrop-filter: blur(10px);
+  z-index: 999999;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  cursor: pointer;
+}
+
+.idle-content {
+  text-align: center;
+  animation: float 6s ease-in-out infinite;
+}
+
+.idle-clock {
+  font-size: 8rem;
+  font-weight: 800;
+  color: rgba(255, 255, 255, 0.8);
+  margin: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.idle-message {
+  font-size: 1.2rem;
+  color: rgba(255, 255, 255, 0.5);
+  margin-top: 10px;
+  letter-spacing: 1px;
+}
+
+@media (max-width: 768px) {
+  .idle-clock { font-size: 5rem; }
+  .idle-message { font-size: 1rem; }
+}
+
+/* Splash Screen (iOS Style) */
+.splash-screen {
+  position: fixed;
+  top: 0; left: 0; width: 100vw; height: 100vh;
+  background-color: var(--bg-main);
+  display: flex; justify-content: center; align-items: center;
+  z-index: 99999;
+}
+
+.splash-logo {
+  animation: splashPulse 2s infinite ease-in-out;
+}
+
+@keyframes splashPulse {
+  0% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.1); opacity: 0.8; }
+  100% { transform: scale(1); opacity: 1; }
+}

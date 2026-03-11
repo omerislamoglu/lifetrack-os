@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useMemo, useRef, Suspense } from 'react';
-import { ChevronLeft, ChevronRight, X, Sun, Moon, Flame, Lock, Download, LogOut, Loader, LayoutDashboard, Target, BarChart3, Maximize, Minimize, ArrowUp, ArrowDown, Check, Trash2, Plus, Trophy, Settings, Bell, BellOff, Languages, Sparkles, Calendar, Clock, Activity, CheckCircle, StickyNote, Edit, Eye, BellRing, Vibrate, Volume2, VolumeX, Trash, ShieldAlert } from 'lucide-react';
+import { ChevronLeft, ChevronRight, X, Sun, Moon, Flame, Lock, Download, LogOut, Loader, LayoutDashboard, Target, BarChart3, Maximize, Minimize, ArrowUp, ArrowDown, Check, Trash2, Plus, Trophy, Settings, Bell, BellOff, Languages, Sparkles, Calendar, Clock, Activity, CheckCircle, StickyNote, Edit, Eye, BellRing, Vibrate, Volume2, VolumeX, Trash, ShieldAlert, Upload } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import confetti from 'canvas-confetti';
+import jsPDF from 'jspdf';
+import html2canvas from 'html2canvas';
 import './App.css';
 import Auth from './Auth';
 import Icon from './Icon'; // Yeni Icon bileşenini import et
@@ -21,6 +22,21 @@ const ReactMarkdown = React.lazy(() => import('react-markdown'));
 
 const availableIcons = ['BookOpen', 'Dumbbell', 'Terminal', 'Code', 'Brain', 'Target', 'Bike', 'Coffee', 'Film', 'Music', 'PenTool', 'Heart', 'TrendingUp', 'Zap', 'BarChart', 'Briefcase', 'DollarSign', 'Globe', 'Home', 'Mic', 'Camera'];
 
+const avatarOptionsList = [
+  'https://cdn-icons-png.flaticon.com/512/1326/1326405.png', // Girl 1
+  'https://cdn-icons-png.flaticon.com/512/1326/1326377.png', // Boy 1
+  'https://cdn-icons-png.flaticon.com/512/1326/1326390.png', // Girl 2
+  'https://cdn-icons-png.flaticon.com/512/1326/1326415.png', // Boy 2
+  'https://cdn-icons-png.flaticon.com/512/1326/1326382.png', // Girl 3
+  'https://cdn-icons-png.flaticon.com/512/1326/1326413.png', // Boy 3
+  'https://cdn-icons-png.flaticon.com/512/1326/1326368.png', // Girl 4
+  'https://cdn-icons-png.flaticon.com/512/1326/1326403.png', // Boy 4
+  'https://cdn-icons-png.flaticon.com/512/1326/1326370.png', // Girl 5
+  'https://cdn-icons-png.flaticon.com/512/1326/1326419.png', // Boy 5
+  'https://cdn-icons-png.flaticon.com/512/1326/1326358.png', // Girl 6
+  'https://cdn-icons-png.flaticon.com/512/1326/1326392.png', // Boy 6
+];
+const generateAvatars = () => avatarOptionsList;
 
 const formatDate = (date) => {
   const y = date.getFullYear();
@@ -113,6 +129,11 @@ const translations = {
     clearData: 'Verileri Temizle',
     confirmClear: 'Tüm verileriniz silinecek. Emin misiniz?',
     deleteAccount: 'Hesabı Sil',
+    downloadReport: 'Raporu İndir (PDF)',
+    chooseAvatar: 'Avatar Seç',
+    uploadPhoto: 'Fotoğraf Yükle',
+    welcome: 'Merhaba',
+    generatedAt: 'Oluşturulma Tarihi:',
     confirmDeleteAccount: 'Hesabınız ve tüm verileriniz kalıcı olarak silinecektir. Bu işlem geri alınamaz. Emin misiniz?'
   },
   en: {
@@ -192,6 +213,11 @@ const translations = {
     clearData: 'Clear Data',
     confirmClear: 'All your data will be deleted. Are you sure?',
     deleteAccount: 'Delete Account',
+    downloadReport: 'Download Report (PDF)',
+    chooseAvatar: 'Choose Avatar',
+    uploadPhoto: 'Upload Photo',
+    welcome: 'Hello',
+    generatedAt: 'Generated At:',
     confirmDeleteAccount: 'Your account and all your data will be permanently deleted. This action cannot be undone. Are you sure?'
   }
 };
@@ -226,7 +252,12 @@ function App() {
   const [user, setUser] = useState(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [currentDate, setCurrentDate] = useState(formatDate(new Date()));
-  const [theme, setTheme] = useState(() => localStorage.getItem('appTheme') || 'dark');
+  const [theme, setTheme] = useState(() => {
+    const savedTheme = localStorage.getItem('appTheme');
+    if (savedTheme) return savedTheme;
+    // Sistem tercihini kontrol et
+    return window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+  });
   const [historyData, setHistoryData] = useState({});
   const [moods, setMoods] = useState({});
   const [todos, setTodos] = useState([]);
@@ -265,8 +296,16 @@ function App() {
   const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false);
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
+  const [showWave, setShowWave] = useState(false);
   const [showScrollTop, setShowScrollTop] = useState(false);
+  const [avatarOptions, setAvatarOptions] = useState([]);
+  const [selectedAvatar, setSelectedAvatar] = useState('');
+  const [isBottomNavVisible, setIsBottomNavVisible] = useState(true);
+  const lastScrollY = useRef(0);
   const gridRef = useRef(null);
+  const fileInputRef = useRef(null);
+  const reportCardRef = useRef(null);
+  const chartCardRef = useRef(null);
   const scrollTimeout = useRef(null);
 
   const isEditable = currentDate === formatDate(new Date());
@@ -275,6 +314,14 @@ function App() {
   // Handle case where data for the current day might not exist yet
   // Eğer o gün için veri yoksa, varsayılan aktiviteleri 0 değerleriyle göster
   const currentActivities = historyData[currentDate] || defaultActivities.map(a => ({ ...a, value: 0 }));
+
+  const handleTabClick = (tab) => {
+    if (isMobile && activeTab === tab && tab !== 'dashboard') {
+      setActiveTab('dashboard');
+    } else {
+      setActiveTab(tab);
+    }
+  };
 
   // Firebase Auth Listener & Data Loading
   useEffect(() => {
@@ -377,6 +424,46 @@ function App() {
     window.addEventListener('scroll', handleScroll);
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
+
+  // Avatar seçeneklerini oluştur
+  useEffect(() => {
+    if (isProfileModalOpen) {
+      setAvatarOptions(generateAvatars());
+    }
+  }, [isProfileModalOpen]);
+
+  const handleFileUpload = (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setSelectedAvatar(reader.result);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  // Hide bottom nav on scroll
+  useEffect(() => {
+    if (!isMobile) {
+      setIsBottomNavVisible(true);
+      return;
+    }
+
+    const controlNavbar = () => {
+      if (window.scrollY > lastScrollY.current && window.scrollY > 100) {
+        if (isBottomNavVisible) setIsBottomNavVisible(false);
+      } else {
+        if (!isBottomNavVisible) setIsBottomNavVisible(true);
+      }
+      lastScrollY.current = window.scrollY;
+    };
+
+    window.addEventListener('scroll', controlNavbar);
+    return () => {
+      window.removeEventListener('scroll', controlNavbar);
+    };
+  }, [isMobile, isBottomNavVisible]);
 
   // AI Mentor text generation based on analysis result and language
   useEffect(() => {
@@ -542,11 +629,53 @@ function App() {
     });
     
     if (newCompleted) {
-      confetti({
-        particleCount: 100,
-        spread: 70,
-        origin: { y: 0.6 }
+      import('canvas-confetti').then(module => {
+        const confetti = module.default;
+        confetti({
+          particleCount: 100,
+          spread: 70,
+          origin: { y: 0.6 }
+        });
+      })
+    }
+  };
+
+  const handleDownloadReport = async () => {
+    if (!reportCardRef.current || !chartCardRef.current) return;
+
+    // Kartın ekran görüntüsü için arka plan rengini belirle
+    const captureBg = theme === 'dark' ? '#1e293b' : '#ffffff';
+
+    try {
+      const chartCanvas = await html2canvas(chartCardRef.current, {
+        backgroundColor: captureBg,
+        scale: 2,
       });
+      
+      const reportCanvas = await html2canvas(reportCardRef.current, {
+        backgroundColor: captureBg,
+        scale: 2,
+        ignoreElements: (element) => element.tagName === 'BUTTON', // Butonu PDF'e dahil etme
+      });
+
+      const pdf = new jsPDF('p', 'px', 'a4');
+      const pdfWidth = pdf.internal.pageSize.getWidth();
+      
+      const chartImgData = chartCanvas.toDataURL('image/png');
+      const reportImgData = reportCanvas.toDataURL('image/png');
+
+      const chartHeight = (chartCanvas.height * pdfWidth) / chartCanvas.width;
+      const reportHeight = (reportCanvas.height * pdfWidth) / reportCanvas.width;
+
+      // Grafik (Üstte)
+      pdf.addImage(chartImgData, 'PNG', 0, 20, pdfWidth, chartHeight);
+
+      // Rapor Yazıları (Grafiğin Altında)
+      pdf.addImage(reportImgData, 'PNG', 0, 20 + chartHeight + 20, pdfWidth, reportHeight);
+
+      pdf.save(`LifeTrack-Rapor-${formatDate(new Date())}.pdf`);
+    } catch (error) {
+      console.error("PDF oluşturulurken hata:", error);
     }
   };
 
@@ -862,9 +991,21 @@ function App() {
     e.preventDefault();
     if (user) {
       try {
-        await updateProfile(user, { displayName: newDisplayName });
-        setUser({ ...user, displayName: newDisplayName });
+        const profileUpdates = { displayName: newDisplayName };
+        if (selectedAvatar) profileUpdates.photoURL = selectedAvatar;
+        
+        await updateProfile(user, profileUpdates);
+        
+        // Force user state update to reflect changes immediately across the app
+        setUser(prevUser => ({
+          ...prevUser,
+          ...profileUpdates,
+          // Ensure photoURL is updated if selectedAvatar is set
+        }));
         setIsProfileModalOpen(false);
+        setSelectedAvatar(''); // Seçimi temizle
+        setShowWave(true);
+        setTimeout(() => setShowWave(false), 3000);
       } catch (error) {
         console.error("Error updating profile: ", error);
       }
@@ -935,9 +1076,10 @@ function App() {
 
   if (authLoading) {
     return (
-      <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh', flexDirection: 'column', gap: '20px', backgroundColor: 'var(--bg-main)' }}>
-        <Loader size={48} className="spin" color="var(--brand-blue)" />
-        <p style={{color: 'var(--text-dim)'}}>{t.loading}</p>
+      <div className="splash-screen" data-theme={theme}>
+        <div className="splash-logo">
+          <img src="https://cdn-icons-png.flaticon.com/512/3256/3256114.png" alt="Logo" width="80" height="80" />
+        </div>
       </div>
     );
   }
@@ -967,8 +1109,15 @@ function App() {
       {/* Sidebar (Kenar Çubuğu) */}
       <motion.nav 
         className="sidebar"
-        animate={{ opacity: (isActive && isImmersive && activeTab === 'focus' && !isFullScreen) ? 0.1 : 1, pointerEvents: (isActive && isImmersive && activeTab === 'focus' && !isFullScreen) ? 'none' : 'auto' }}
-        transition={{ duration: 0.5 }}
+        animate={{ 
+          opacity: (isActive && isImmersive && activeTab === 'focus' && !isFullScreen) ? 0.1 : 1, 
+          pointerEvents: (isActive && isImmersive && activeTab === 'focus' && !isFullScreen) ? 'none' : 'auto',
+          y: isMobile && !isBottomNavVisible ? '100%' : '0%'
+        }}
+        transition={{ 
+          y: { type: "spring", stiffness: 400, damping: 40 },
+          opacity: { duration: 0.5 }
+        }}
       >
         <div className="sidebar-header" onClick={() => !isActive && setActiveTab('dashboard')}>
           <h1>LifeTrack</h1>
@@ -976,13 +1125,13 @@ function App() {
         </div>
         
         <div className="sidebar-menu">
-          <button className={`sidebar-btn ${activeTab === 'dashboard' ? 'active' : ''}`} onClick={() => setActiveTab('dashboard')}>
+          <button className={`sidebar-btn ${activeTab === 'dashboard' ? 'active' : ''}`} onClick={() => handleTabClick('dashboard')}>
             <LayoutDashboard size={22} /> <span>{t.dashboard}</span>
           </button>
-          <button className={`sidebar-btn ${activeTab === 'focus' ? 'active' : ''}`} onClick={() => setActiveTab('focus')}>
+          <button className={`sidebar-btn ${activeTab === 'focus' ? 'active' : ''}`} onClick={() => handleTabClick('focus')}>
             <Target size={22} /> <span>{t.focus}</span>
           </button>
-          <button className={`sidebar-btn ${activeTab === 'analytics' ? 'active' : ''}`} onClick={() => setActiveTab('analytics')}>
+          <button className={`sidebar-btn ${activeTab === 'analytics' ? 'active' : ''}`} onClick={() => handleTabClick('analytics')}>
             <BarChart3 size={22} /> <span>{t.analytics}</span>
           </button>
         </div>
@@ -1039,7 +1188,7 @@ function App() {
           </AnimatePresence>
         </div>
 
-        <button className={`sidebar-btn sidebar-settings-btn ${activeTab === 'settings' ? 'active' : ''}`} onClick={() => setActiveTab('settings')}>
+        <button className={`sidebar-btn sidebar-settings-btn ${activeTab === 'settings' ? 'active' : ''}`} onClick={() => handleTabClick('settings')}>
           <Settings size={22} /> <span>{t.settings}</span>
         </button>
 
@@ -1067,7 +1216,25 @@ function App() {
         >
           <div className="header-content">
           <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
-            <h2 className="header-title">LifeTrack OS</h2>
+            <div style={{display:'flex', flexDirection:'column'}}>
+              <h2 className="header-title" style={{marginBottom: '2px'}}>LifeTrack OS</h2>
+              <span style={{fontSize:'0.85rem', color:'var(--text-dim)', display:'flex', alignItems:'center', gap:'5px', fontWeight: 500}}>
+                  {t.welcome}, {user.displayName || user.email?.split('@')[0]}
+                  <AnimatePresence>
+                      {showWave && (
+                          <motion.span
+                              initial={{ rotate: 0, scale: 0 }}
+                              animate={{ rotate: [0, 14, -8, 14, -4, 10, 0, 0], scale: 1 }}
+                              exit={{ scale: 0 }}
+                              transition={{ duration: 2.5 }}
+                              style={{ display: 'inline-block', originX: 0.7, originY: 0.7 }}
+                          >
+                              👋
+                          </motion.span>
+                      )}
+                  </AnimatePresence>
+              </span>
+            </div>
             <motion.div whileHover={{ scale: 1.05 }} className="streak-badge">
               <Flame size={20} color={streak > 0 ? "#ef4444" : "#64748b"} />
               <span style={{ color: streak > 0 ? "#ef4444" : "#64748b", fontSize: '0.9rem' }}>{streak} {t.streak}</span>
@@ -1137,7 +1304,7 @@ function App() {
               </div>
             </motion.div>
 
-            <div className="grid" ref={gridRef} onScroll={handleScroll}>
+            <div className={isMobile ? "grid" : "grid desktop-grid"} ref={gridRef} onScroll={handleScroll}>
               <AnimatePresence mode='popLayout'>
               {currentActivities.map((act, index) => {
                 const prog = Math.min((act.value / (act.goal || 1)) * 100, 100);
@@ -1158,13 +1325,15 @@ function App() {
                       // Mobilde yukarı kaydırınca sil (Yatay kaydırma navigasyon için kullanılıyor)
                       if (offset.y < -100 && isEditable) deleteActivity(act.id);
                     }}
-                    onClick={() => isEditable && setEditingActivity(act)}
-                    onDragStart={(e) => e.dataTransfer.setData('text/plain', index)}
+                    onClick={() => setEditingActivity(act)} // Mobilde her zaman tıklanabilir olsun (Edit modalı için)
+                    onDragStart={(e) => {
+                      if (e.dataTransfer) e.dataTransfer.setData('text/plain', index);
+                    }}
                     onDragOver={(e) => e.preventDefault()}
                     onDrop={(e) => {
                       e.preventDefault();
-                      if (!isEditable) return;
-                      const dragIndex = parseInt(e.dataTransfer.getData('text/plain'));
+                      if (!isEditable || !e.dataTransfer) return;
+                      const dragIndex = parseInt(e.dataTransfer.getData('text/plain'), 10);
                       if (dragIndex === index) return;
                       const newArr = [...currentActivities];
                       const [moved] = newArr.splice(dragIndex, 1);
@@ -1340,10 +1509,13 @@ function App() {
                         if (Math.abs(offset.x) > 100) deleteTodo(todo.id);
                       }}
                       draggable
-                      onDragStart={(e) => e.dataTransfer.setData('todoIndex', index)}
+                      onDragStart={(e) => {
+                        if (e.dataTransfer) e.dataTransfer.setData('todoIndex', index);
+                      }}
                       onDragOver={(e) => e.preventDefault()}
                       onDrop={(e) => {
                         e.preventDefault();
+                        if (!e.dataTransfer) return;
                         const dragIndex = Number(e.dataTransfer.getData('todoIndex'));
                         if (isNaN(dragIndex) || dragIndex === index) return;
                         const newTodos = [...todos];
@@ -1433,8 +1605,13 @@ function App() {
               )}
             </div>
 
-            <div className="ai-insight-card">
-              <h3>{t.weeklyReport}</h3>
+            <div className="ai-insight-card" ref={reportCardRef}>
+              <div className="insight-card-header">
+                <h3>{t.weeklyReport}</h3>
+                <button className="icon-btn" onClick={handleDownloadReport} title={t.downloadReport}>
+                  <Download size={18} />
+                </button>
+              </div>
               <ul>
                 {analysisData.bestDay && <li>📅 {t.bestDay} <strong style={{color: 'var(--brand-blue)', marginLeft:'5px'}}>{analysisData.bestDay}</strong>{t.bestDaySuffix}</li>}
                 {analysisData.comparisonData.map(item => {
@@ -1564,16 +1741,30 @@ function App() {
             >
               <button className="modal-close" onClick={() => setIsProfileModalOpen(false)}><X size={24}/></button>
               <div style={{textAlign: 'center', marginBottom: '20px'}}>
-                {user.photoURL ? (
-                  <img src={user.photoURL} alt="Profil" className="modal-avatar" />
+                {selectedAvatar || user.photoURL ? (
+                  <img src={selectedAvatar || user.photoURL} alt="Profil" className="modal-avatar" onClick={() => fileInputRef.current.click()} title={t.uploadPhoto}/>
                 ) : (
-                  <div className="modal-avatar-placeholder">{user.email?.charAt(0).toUpperCase()}</div>
+                  <div className="modal-avatar-placeholder" onClick={() => fileInputRef.current.click()} title={t.uploadPhoto}>{user.email?.charAt(0).toUpperCase()}</div>
                 )}
                 <h2 style={{margin: '10px 0 5px 0'}}>{user.displayName || 'Kullanıcı'}</h2>
                 <p style={{color: 'var(--text-dim)', margin: 0}}>{user.email}</p>
               </div>
               
               <form onSubmit={handleUpdateProfile} className="edit-form">
+                <div className="form-group">
+                    <div className="avatar-selector">
+                      {avatarOptions.map((url, index) => (
+                        <img key={index} src={url} alt="Avatar" className={`avatar-option ${selectedAvatar === url ? 'selected' : ''}`} onClick={() => setSelectedAvatar(url)} />
+                      ))}
+                    </div>
+                    <input 
+                      type="file" 
+                      ref={fileInputRef} 
+                      onChange={handleFileUpload} 
+                      accept="image/*" 
+                      style={{display:'none'}} 
+                    />
+                </div>
                 <div className="form-group">
                     <label>{t.username}</label>
                     <input type="text" value={newDisplayName} onChange={(e) => setNewDisplayName(e.target.value)} placeholder={t.username} />
@@ -1781,7 +1972,11 @@ function App() {
             className="scroll-to-top-btn"
             onClick={scrollToTop}
             initial={{ opacity: 0, scale: 0.5 }}
-            animate={{ opacity: 1, scale: 1 }}
+            animate={{
+              opacity: 1,
+              scale: 1,
+              bottom: isMobile && !isBottomNavVisible ? 30 : 100
+            }}
             exit={{ opacity: 0, scale: 0.5 }}
             whileHover={{ scale: 1.1 }}
             whileTap={{ scale: 0.9 }}
