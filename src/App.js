@@ -1,19 +1,26 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { ChevronLeft, ChevronRight, X, Sun, Moon, Flame, Lock, Download, LogOut, Loader, LayoutDashboard, Target, BarChart3, Maximize, Minimize, ArrowUp, ArrowDown, Check, Trash2, Plus, Trophy, Settings, Bell, BellOff, Languages, Sparkles } from 'lucide-react';
-import { LineChart, Line, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import React, { useState, useEffect, useMemo, useRef, Suspense } from 'react';
+import { ChevronLeft, ChevronRight, X, Sun, Moon, Flame, Lock, Download, LogOut, Loader, LayoutDashboard, Target, BarChart3, Maximize, Minimize, ArrowUp, ArrowDown, Check, Trash2, Plus, Trophy, Settings, Bell, BellOff, Languages, Sparkles, Calendar, Clock, Activity, CheckCircle, StickyNote, Edit, Eye, BellRing, Vibrate, Volume2, VolumeX, Trash, Mail, ShieldAlert } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import confetti from 'canvas-confetti';
 import './App.css';
 import Auth from './Auth';
+import Icon from './Icon'; // Yeni Icon bileşenini import et
 import { auth, db } from './firebase';
-import { onAuthStateChanged, signOut, updateProfile } from 'firebase/auth';
-import { doc, getDoc, setDoc } from 'firebase/firestore';
+import { onAuthStateChanged, signOut, updateProfile, updatePassword, reauthenticateWithCredential, EmailAuthProvider, deleteUser } from 'firebase/auth';
+import { doc, getDoc, setDoc, deleteDoc } from 'firebase/firestore';
 
 const defaultActivities = [
   { id: 1, name: 'Ders (Saat)', iconName: 'Book', value: 0, goal: 6, weeklyGoal: 42, color: '#3b82f6' },
   { id: 3, name: 'Spor (Dakika)', iconName: 'Dumbbell', value: 0, goal: 45, weeklyGoal: 315, color: '#10b981' },
   { id: 5, name: 'Kod (Satır)', iconName: 'Terminal', value: 0, goal: 150, weeklyGoal: 1050, color: '#8b5cf6' },
 ];
+
+const DashboardChart = React.lazy(() => import('./DashboardChart'));
+const AnalyticsChart = React.lazy(() => import('./AnalyticsChart'));
+const ReactMarkdown = React.lazy(() => import('react-markdown'));
+
+const availableIcons = ['BookOpen', 'Dumbbell', 'Terminal', 'Code', 'Brain', 'Target', 'Bike', 'Coffee', 'Film', 'Music', 'PenTool', 'Heart', 'TrendingUp', 'Zap', 'BarChart', 'Briefcase', 'DollarSign', 'Globe', 'Home', 'Mic', 'Camera'];
+
 
 const formatDate = (date) => {
   const y = date.getFullYear();
@@ -67,6 +74,7 @@ const translations = {
     activityName: 'Aktivite Adı',
     dailyGoal: 'Günlük Hedef',
     weeklyGoal: 'Haftalık Hedef',
+    icon: 'İkon',
     colorTheme: 'Renk Teması',
     bestDay: 'İstatistiklere göre en verimli gününüz:',
     bestDaySuffix: '. En zorlu işleri bu güne planlayabilirsiniz.',
@@ -76,12 +84,36 @@ const translations = {
     locked: 'Geçmiş kilitli',
     completed: 'tamamlandı',
     aiMentor: 'AI Mentor',
+    quickNotes: 'Hızlı Notlar',
+    typeHere: 'Buraya not al...',
+    systemStats: 'Sistem İstatistikleri',
+    memberSince: 'Üyelik Tarihi',
+    totalFocus: 'Toplam Odaklanma',
+    mostActive: 'En Aktif Gün',
+    totalTasks: 'Tamamlanan Görevler',
+    hours: 'Saat',
     askMentor: 'Mentoruna Sor',
     analyzing: 'Veriler inceleniyor...',
     reportJump: 'alanında harika bir sıçrama! Geçen haftaya göre %{change} daha üretkensiniz.',
     reportDrop: 'alanında bir düşüş var. Geçen haftaya göre %{change} daha az. Odağınızı buraya çevirebilirsiniz.',
     reportStable: 'alanında istikrarlı bir ilerleme kaydediyorsunuz.',
-    reportMaintain: 'alanında geçen haftaki performansınızı koruyorsunuz.'
+    reportMaintain: 'alanında geçen haftaki performansınızı koruyorsunuz.',
+    preview: 'Önizle',
+    edit: 'Düzenle',
+    expand: 'Genişlet',
+    alarmSound: 'Alarm Sesi',
+    beepSound: 'Bip Sesi',
+    chimeSound: 'Çan Sesi',
+    vibrateOnly: 'Sadece Titreşim',
+    changePassword: 'Şifre Değiştir',
+    silent: 'Sessiz',
+    currentPassword: 'Mevcut Şifre',
+    newPassword: 'Yeni Şifre',
+    passwordUpdated: 'Şifreniz başarıyla güncellendi.',
+    clearData: 'Verileri Temizle',
+    confirmClear: 'Tüm verileriniz silinecek. Emin misiniz?',
+    deleteAccount: 'Hesabı Sil',
+    confirmDeleteAccount: 'Hesabınız ve tüm verileriniz kalıcı olarak silinecektir. Bu işlem geri alınamaz. Emin misiniz?'
   },
   en: {
     dashboard: 'Dashboard',
@@ -121,6 +153,7 @@ const translations = {
     activityName: 'Activity Name',
     dailyGoal: 'Daily Goal',
     weeklyGoal: 'Weekly Goal',
+    icon: 'Icon',
     colorTheme: 'Color Theme',
     bestDay: 'According to stats, your most productive day is:',
     bestDaySuffix: '. You can plan your hardest tasks for this day.',
@@ -130,12 +163,36 @@ const translations = {
     locked: 'History locked',
     completed: 'completed',
     aiMentor: 'AI Mentor',
+    quickNotes: 'Quick Notes',
+    typeHere: 'Type here...',
+    systemStats: 'System Statistics',
+    memberSince: 'Member Since',
+    totalFocus: 'Total Focus Time',
+    mostActive: 'Most Active Day',
+    totalTasks: 'Completed Tasks',
+    hours: 'Hours',
     askMentor: 'Ask Mentor',
     analyzing: 'Analyzing data...',
     reportJump: 'area saw a great jump! {change}% more productive than last week.',
     reportDrop: 'area saw a drop. {change}% less than last week. You might want to focus here.',
     reportStable: 'area shows steady progress.',
-    reportMaintain: 'area performance is maintained from last week.'
+    reportMaintain: 'area performance is maintained from last week.',
+    preview: 'Preview',
+    edit: 'Edit',
+    expand: 'Expand',
+    alarmSound: 'Alarm Sound',
+    beepSound: 'Beep Sound',
+    chimeSound: 'Chime Sound',
+    vibrateOnly: 'Vibrate Only',
+    changePassword: 'Change Password',
+    silent: 'Silent',
+    currentPassword: 'Current Password',
+    newPassword: 'New Password',
+    passwordUpdated: 'Password updated successfully.',
+    clearData: 'Clear Data',
+    confirmClear: 'All your data will be deleted. Are you sure?',
+    deleteAccount: 'Delete Account',
+    confirmDeleteAccount: 'Your account and all your data will be permanently deleted. This action cannot be undone. Are you sure?'
   }
 };
 
@@ -148,6 +205,23 @@ const accentColors = [
   { value: '#ef4444', label: 'Kırmızı' },
 ];
 
+const alarmSounds = {
+  beep: 'https://actions.google.com/sounds/v1/alarms/beep_short.ogg',
+  chime: 'https://actions.google.com/sounds/v1/alarms/alarm_clock.ogg',
+};
+
+const pageVariants = {
+  initial: { opacity: 0, x: 20, scale: 0.98 },
+  animate: { opacity: 1, x: 0, scale: 1 },
+  exit: { opacity: 0, x: -20, scale: 0.98 }
+};
+
+const pageTransition = {
+  type: "spring",
+  stiffness: 500,
+  damping: 40
+};
+
 function App() {
   const [user, setUser] = useState(null);
   const [authLoading, setAuthLoading] = useState(true);
@@ -159,11 +233,11 @@ function App() {
   const [dailyGoals, setDailyGoals] = useState({});
   const [newTodo, setNewTodo] = useState('');
   const [activeTab, setActiveTab] = useState('dashboard');
-  //const [currentTime, setCurrentTime] = useState(new Date());
   
   const [newName, setNewName] = useState('');
   const [newGoal, setNewGoal] = useState('');
   const [newWeeklyGoal, setNewWeeklyGoal] = useState('');
+  const [newIcon, setNewIcon] = useState('Activity');
 
   // Pomodoro
   const [pomodoroDuration, setPomodoroDuration] = useState(25);
@@ -173,20 +247,34 @@ function App() {
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
   const [editingActivity, setEditingActivity] = useState(null);
   const [newDisplayName, setNewDisplayName] = useState('');
-  const [newPhotoURL, setNewPhotoURL] = useState('');
   const [notifications, setNotifications] = useState(() => JSON.parse(localStorage.getItem('appNotifications')) ?? true);
   const [language, setLanguage] = useState(() => localStorage.getItem('appLanguage') || 'tr');
   const [accentColor, setAccentColor] = useState(() => localStorage.getItem('appAccentColor') || '#3b82f6');
+  const [alarmSetting, setAlarmSetting] = useState(() => localStorage.getItem('appAlarmSetting') || 'beep');
   const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
+  const [isTimerCompleted, setIsTimerCompleted] = useState(false);
+  const [isImmersive, setIsImmersive] = useState(false);
   const [aiAdvice, setAiAdvice] = useState('');
   const [isAiLoading, setIsAiLoading] = useState(false);
   const [aiAnalysisResult, setAiAnalysisResult] = useState(null);
   const [activeCardIndex, setActiveCardIndex] = useState(0);
+  const [scratchpadContent, setScratchpadContent] = useState('');
+  const [isScratchpadOpen, setIsScratchpadOpen] = useState(false);
+  const [isScratchpadExpanded, setIsScratchpadExpanded] = useState(false);
+  const [isScratchpadPreview, setIsScratchpadPreview] = useState(false);
+  const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false);
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [showScrollTop, setShowScrollTop] = useState(false);
   const gridRef = useRef(null);
   const scrollTimeout = useRef(null);
 
   const isEditable = currentDate === formatDate(new Date());
   const t = translations[language];
+
+  // Handle case where data for the current day might not exist yet
+  // Eğer o gün için veri yoksa, varsayılan aktiviteleri 0 değerleriyle göster
+  const currentActivities = historyData[currentDate] || defaultActivities.map(a => ({ ...a, value: 0 }));
 
   // Firebase Auth Listener & Data Loading
   useEffect(() => {
@@ -209,12 +297,14 @@ function App() {
             setMoods(data.moods || {});
             setTodos(data.todos || []);
             setDailyGoals(data.dailyGoals || {});
+            setScratchpadContent(data.scratchpadContent || '');
           } else {
             // New user, initialize with default data for today
             setHistoryData({ [formatDate(new Date())]: defaultActivities });
             setMoods({});
             setTodos([]);
             setDailyGoals({});
+            setScratchpadContent('');
           }
         } else {
           setUser(null);
@@ -222,6 +312,7 @@ function App() {
           setMoods({});
           setTodos([]);
           setDailyGoals({});
+          setScratchpadContent('');
         }
       } catch (error) {
         console.error("Firebase veri yükleme hatası:", error);
@@ -243,11 +334,11 @@ function App() {
 
     const debounceSave = setTimeout(async () => {
       const userDocRef = doc(db, 'users', user.uid);
-      await setDoc(userDocRef, { historyData, moods, todos, dailyGoals }, { merge: true });
+      await setDoc(userDocRef, { historyData, moods, todos, dailyGoals, scratchpadContent }, { merge: true });
     }, 1500); // Debounce to avoid too many writes
 
     return () => clearTimeout(debounceSave);
-  }, [historyData, moods, todos, dailyGoals, user]);
+  }, [historyData, moods, todos, dailyGoals, scratchpadContent, user]);
 
   // Theme persistence
   useEffect(() => {
@@ -266,11 +357,25 @@ function App() {
     localStorage.setItem('appAccentColor', accentColor);
   }, [accentColor]);
 
+  // Alarm Sesi Ayarı
+  useEffect(() => {
+    localStorage.setItem('appAlarmSetting', alarmSetting);
+  }, [alarmSetting]);
+
   // Mobil cihaz algılama
   useEffect(() => {
     const handleResize = () => setIsMobile(window.innerWidth <= 768);
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
+  // Scroll to top button logic
+  useEffect(() => {
+    const handleScroll = () => {
+      setShowScrollTop(window.scrollY > 300);
+    };
+    window.addEventListener('scroll', handleScroll);
+    return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
   // AI Mentor text generation based on analysis result and language
@@ -354,8 +459,30 @@ function App() {
       interval = setInterval(() => {
         setTimeLeft(prev => {
           if (prev <= 1) {
-            new Audio('https://actions.google.com/sounds/v1/alarms/beep_short.ogg').play().catch(() => {});
+            if (alarmSetting !== 'silent') {
+              if (alarmSetting === 'vibrate_only') {
+                  if ('vibrate' in navigator) navigator.vibrate([200, 100, 200]);
+              } else if (alarmSounds[alarmSetting]) {
+                  const audio = new Audio(alarmSounds[alarmSetting]);
+                  audio.volume = 0.5;
+                  audio.play().catch(() => {});
+              }
+            }
+            
+            if (notifications && "Notification" in window) {
+              if (Notification.permission === "granted") {
+                new Notification("LifeTrack OS", { body: t.completed });
+              } else if (Notification.permission !== "denied") {
+                Notification.requestPermission().then(permission => {
+                  if (permission === "granted") {
+                    new Notification("LifeTrack OS", { body: t.completed });
+                  }
+                });
+              }
+            }
+
             setIsActive(false);
+            setIsTimerCompleted(true);
             return 0;
           }
           return prev - 1;
@@ -363,9 +490,7 @@ function App() {
       }, 1000);
     } else { clearInterval(interval); }
     return () => clearInterval(interval);
-  }, [isActive, timeLeft]);
-
-  // Dijital Saat
+  }, [isActive, timeLeft, notifications, t, currentActivities, pomodoroDuration, user, alarmSetting]);
 
   // Tarayıcı sekmesinde (Title) kalan süreyi göster
   useEffect(() => {
@@ -373,15 +498,19 @@ function App() {
       const mins = Math.floor(timeLeft / 60);
       const secs = (timeLeft % 60).toString().padStart(2, '0');
       document.title = `(${mins}:${secs}) LifeTrack OS`;
+    } else if (isTimerCompleted) {
+      const titleText = t.completed.charAt(0).toUpperCase() + t.completed.slice(1);
+      document.title = `${titleText}! 🎉`;
     } else {
       document.title = 'Daily Flow | Productivity Dashboard';
     }
-  }, [isActive, timeLeft]);
+  }, [isActive, timeLeft, isTimerCompleted, t]);
 
   // ESC tuşu ile tam ekrandan çıkma
   useEffect(() => {
     const handleEsc = (event) => {
       if (event.key === 'Escape') setIsFullScreen(false);
+      if (event.key === 'Escape') setIsScratchpadExpanded(false);
     };
     window.addEventListener('keydown', handleEsc);
     return () => window.removeEventListener('keydown', handleEsc);
@@ -419,6 +548,63 @@ function App() {
         origin: { y: 0.6 }
       });
     }
+  };
+
+  const handleUpdatePassword = async (e) => {
+    e.preventDefault();
+    if (user && newPassword && currentPassword) {
+      try {
+        const credential = EmailAuthProvider.credential(user.email, currentPassword);
+        await reauthenticateWithCredential(user, credential);
+        
+        await updatePassword(user, newPassword);
+        alert(t.passwordUpdated);
+        setIsPasswordModalOpen(false);
+        setNewPassword('');
+        setCurrentPassword('');
+      } catch (error) {
+        console.error("Error updating password: ", error);
+        alert(error.message);
+      }
+    }
+  };
+
+  const handleClearData = async () => {
+    if (window.confirm(t.confirmClear)) {
+      // Varsayılan verilere dön
+      setHistoryData({ [formatDate(new Date())]: defaultActivities });
+      setMoods({});
+      setTodos([]);
+      setDailyGoals({});
+      setScratchpadContent('');
+      // Firebase'e kaydetme işlemi useEffect ile tetiklenecek
+    }
+  };
+
+  const handleDeleteAccount = async () => {
+    if (window.confirm(t.confirmDeleteAccount)) {
+        if (!user) return;
+        try {
+            // First, delete user data from Firestore
+            const userDocRef = doc(db, 'users', user.uid);
+            await deleteDoc(userDocRef);
+
+            // Then, delete the user from Auth
+            await deleteUser(user);
+            // onAuthStateChanged will handle the rest
+        } catch (error) {
+            console.error("Error deleting account: ", error);
+            if (error.code === 'auth/requires-recent-login') {
+                alert('Bu işlem için yeniden giriş yapmanız gerekmektedir. Lütfen çıkış yapıp tekrar giriş yaptıktan sonra deneyin.');
+            } else {
+                alert(`Hesap silinirken bir hata oluştu: ${error.message}`);
+            }
+        }
+    }
+  };
+
+  const scrollToTop = () => {
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const chartColor = accentColor;
@@ -599,6 +785,33 @@ function App() {
     });
   };
 
+  // Sistem İstatistikleri Hesaplama
+  const systemStats = useMemo(() => {
+    if (!user) return { memberSince: '-', totalHours: 0 };
+    
+    const joinDate = new Date(user.metadata.creationTime);
+    const memberSince = joinDate.toLocaleDateString(language === 'tr' ? 'tr-TR' : 'en-US', { month: 'long', year: 'numeric' });
+
+    let totalMinutes = 0;
+    Object.values(historyData).forEach(dayData => {
+      if (Array.isArray(dayData)) {
+        dayData.forEach(act => {
+           const lowerName = act.name.toLowerCase();
+           if (lowerName.includes('saat') || lowerName.includes('hour')) {
+             totalMinutes += (parseFloat(act.value) || 0) * 60;
+           } else if (lowerName.includes('dakika') || lowerName.includes('minute') || lowerName.includes('min')) {
+             totalMinutes += (parseFloat(act.value) || 0);
+           }
+        });
+      }
+    });
+    
+    const totalHours = Math.floor(totalMinutes / 60);
+    const completedTasks = todos.filter(t => t.completed).length;
+    
+    return { memberSince, totalHours, completedTasks };
+  }, [user, historyData, language, todos]);
+
   const handleScroll = () => {
     if (gridRef.current) {
         clearTimeout(scrollTimeout.current);
@@ -614,10 +827,6 @@ function App() {
     }
   };
 
-  // Handle case where data for the current day might not exist yet
-  // Eğer o gün için veri yoksa, varsayılan aktiviteleri 0 değerleriyle göster
-  const currentActivities = historyData[currentDate] || defaultActivities.map(a => ({ ...a, value: 0 }));
-
   const updateData = (id, field, val) => {
     const updated = currentActivities.map(a => a.id === id ? { ...a, [field]: parseFloat(val) || 0 } : a);
     setHistoryData({ ...historyData, [currentDate]: updated });
@@ -632,12 +841,13 @@ function App() {
     e.preventDefault();
     if (!newName || !newGoal) return;
     const newAct = {
-      id: Date.now(), name: newName, iconName: 'Terminal', value: 0, goal: parseFloat(newGoal), 
+      id: Date.now(), name: newName, iconName: newIcon, value: 0, goal: parseFloat(newGoal), 
       weeklyGoal: parseFloat(newWeeklyGoal) || (parseFloat(newGoal) * 7),
       color: '#' + Math.floor(Math.random()*16777215).toString(16)
     };
     setHistoryData({ ...historyData, [currentDate]: [...currentActivities, newAct] });
     setNewName(''); setNewGoal(''); setNewWeeklyGoal('');
+    setNewIcon('Activity');
   };
 
   const handleSaveActivity = (e) => {
@@ -652,8 +862,8 @@ function App() {
     e.preventDefault();
     if (user) {
       try {
-        await updateProfile(user, { displayName: newDisplayName, photoURL: newPhotoURL });
-        setUser({ ...user, displayName: newDisplayName, photoURL: newPhotoURL });
+        await updateProfile(user, { displayName: newDisplayName });
+        setUser({ ...user, displayName: newDisplayName });
         setIsProfileModalOpen(false);
       } catch (error) {
         console.error("Error updating profile: ", error);
@@ -742,9 +952,25 @@ function App() {
 
   return (
     <div className="dashboard-layout">
+      {/* Odak modundan çıkmak için tıklanabilir arkaplan */}
+      <AnimatePresence>
+        {isActive && isImmersive && activeTab === 'focus' && !isFullScreen && (
+            <motion.div
+                className="focus-exit-overlay"
+                onClick={() => setIsImmersive(false)}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.5 }}
+            />
+        )}
+      </AnimatePresence>
       {/* Sidebar (Kenar Çubuğu) */}
-      <nav className="sidebar">
-        <div className="sidebar-header" onClick={() => setActiveTab('dashboard')}>
+      <motion.nav 
+        className="sidebar"
+        animate={{ opacity: (isActive && isImmersive && activeTab === 'focus' && !isFullScreen) ? 0.1 : 1, pointerEvents: (isActive && isImmersive && activeTab === 'focus' && !isFullScreen) ? 'none' : 'auto' }}
+        transition={{ duration: 0.5 }}
+      >
+        <div className="sidebar-header" onClick={() => !isActive && setActiveTab('dashboard')}>
           <h1>LifeTrack</h1>
           <p>OS</p>
         </div>
@@ -759,21 +985,87 @@ function App() {
           <button className={`sidebar-btn ${activeTab === 'analytics' ? 'active' : ''}`} onClick={() => setActiveTab('analytics')}>
             <BarChart3 size={22} /> <span>{t.analytics}</span>
           </button>
-          <button className={`sidebar-btn ${activeTab === 'settings' ? 'active' : ''}`} onClick={() => setActiveTab('settings')}>
-            <Settings size={22} /> <span>{t.settings}</span>
-          </button>
         </div>
+
+        {/* Hızlı Notlar (Scratchpad) */}
+        <div className="sidebar-scratchpad">
+          <button className={`sidebar-btn ${isScratchpadOpen ? 'active' : ''}`} onClick={() => setIsScratchpadOpen(!isScratchpadOpen)}>
+            <StickyNote size={22} /> <span>{t.quickNotes}</span>
+          </button>
+          <AnimatePresence>
+            {isScratchpadOpen && (
+              <motion.div
+                initial={{ height: 0, opacity: 0, marginTop: 0 }}
+                animate={{ height: 'auto', opacity: 1, marginTop: 10 }}
+                exit={{ height: 0, opacity: 0, marginTop: 0 }}
+                style={{ overflow: 'hidden', position: 'relative' }}
+              >
+                <div className="scratchpad-controls">
+                  <button 
+                    className="scratchpad-control-btn" 
+                    onClick={() => setIsScratchpadPreview(!isScratchpadPreview)}
+                    title={isScratchpadPreview ? t.edit : t.preview}
+                  >
+                    {isScratchpadPreview ? <Edit size={14} /> : <Eye size={14} />}
+                  </button>
+                  <button 
+                    className="scratchpad-control-btn"
+                    onClick={() => setIsScratchpadExpanded(true)}
+                    title={t.expand}
+                  >
+                    <Maximize size={14} />
+                  </button>
+                </div>
+                {isScratchpadPreview ? (
+                  <div className="scratchpad-preview markdown-body">
+                    {scratchpadContent ? (
+                      <Suspense fallback={<div className="loading-text">{t.loading}</div>}>
+                        <ReactMarkdown>{scratchpadContent}</ReactMarkdown>
+                      </Suspense>
+                    ) : (
+                      <div className="scratchpad-empty-preview">Markdown formatında metin yazarak önizlemeyi görün.</div>
+                    )}
+                   </div>
+                ) : (
+                  <textarea
+                    className="scratchpad-textarea"
+                    value={scratchpadContent}
+                    onChange={(e) => setScratchpadContent(e.target.value)}
+                    placeholder={t.typeHere}
+                  />
+                )}
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
+
+        <button className={`sidebar-btn sidebar-settings-btn ${activeTab === 'settings' ? 'active' : ''}`} onClick={() => setActiveTab('settings')}>
+          <Settings size={22} /> <span>{t.settings}</span>
+        </button>
+
+        <div className="sidebar-spacer"></div>
+
+        {(isActive || isTimerCompleted) && (
+          <div className={`sidebar-timer ${isTimerCompleted ? 'completed' : ''}`} onClick={() => setActiveTab('focus')}>
+            <div className="sidebar-timer-dot"></div>
+            <span>{isTimerCompleted ? t.completed : `${Math.floor(timeLeft/60)}:${(timeLeft%60).toString().padStart(2,'0')}`}</span>
+          </div>
+        )}
 
         <div className="sidebar-footer">
           <button className="sidebar-btn" onClick={handleSignOut} style={{ color: '#ef4444' }}>
             <LogOut size={22} /> <span>{t.logout}</span>
           </button>
         </div>
-      </nav>
+      </motion.nav>
 
       <main className="main-content">
-        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="app-container" style={{paddingTop: 'max(20px, env(safe-area-inset-top))'}}>
-          <div className="header-top">
+        <motion.div 
+          className="header-top"
+          animate={{ opacity: (isActive && isImmersive && activeTab === 'focus' && !isFullScreen) ? 0.1 : 1, pointerEvents: (isActive && isImmersive && activeTab === 'focus' && !isFullScreen) ? 'none' : 'auto' }}
+          transition={{ duration: 0.5 }}
+        >
+          <div className="header-content">
           <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
             <h2 className="header-title">LifeTrack OS</h2>
             <motion.div whileHover={{ scale: 1.05 }} className="streak-badge">
@@ -782,7 +1074,7 @@ function App() {
             </motion.div>
           </div>
           {/* Kullanıcı Profili */}
-          <div className="user-profile" onClick={() => { setNewDisplayName(user.displayName || ''); setNewPhotoURL(user.photoURL || ''); setIsProfileModalOpen(true); }} style={{cursor: 'pointer'}} title={t.editProfile}>
+          <div className="user-profile" onClick={() => { setNewDisplayName(user.displayName || ''); setIsProfileModalOpen(true); }} style={{cursor: 'pointer'}} title={t.editProfile}>
             <span className="user-name">{user.displayName || user.email?.split('@')[0]}</span>
             {user.photoURL ? (
               <img src={user.photoURL} alt="Profil" className="user-avatar" />
@@ -790,16 +1082,19 @@ function App() {
               <div className="user-avatar-placeholder">{user.email?.charAt(0).toUpperCase()}</div>
             )}
           </div>
-      </div>
+          </div>
+        </motion.div>
+        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="app-container">
 
       <AnimatePresence mode='wait'>
         {activeTab === 'dashboard' && (
           <motion.div 
             key="dashboard"
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -10 }}
-            transition={{ duration: 0.2 }}
+            variants={pageVariants}
+            initial="initial"
+            animate="animate"
+            exit="exit"
+            transition={pageTransition}
           >
             {/* Günün Öncelikli Hedefi */}
             <motion.div className="daily-goal-wrapper">
@@ -878,16 +1173,19 @@ function App() {
                     }}
                   >
                     {isEditable && <button className="delete-btn" onClick={(e) => { e.stopPropagation(); deleteActivity(act.id); }}><X size={16}/></button>}
-                    <h3 style={{color: act.color, margin: '0 0 10px 0', fontSize: '1.1rem'}}>{act.name}</h3>
+                    <div className="card-header">
+                      <Icon name={act.iconName} size={20} style={{ color: accentColor }} />
+                      <h3 style={{color: accentColor, margin: 0, fontSize: '1.1rem'}}>{act.name}</h3>
+                    </div>
                     <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px'}}>
                       <div className="input-group" style={{margin: 0}}>
                         <input type="number" className="value-input" value={act.value || ''} onClick={(e) => e.stopPropagation()} onChange={(e) => updateData(act.id, 'value', e.target.value)} disabled={!isEditable} />
                         <span style={{color: 'var(--text-dim)', fontWeight: 'bold'}}>/</span>
                         <input type="number" className="goal-input" value={act.goal || ''} onClick={(e) => e.stopPropagation()} onChange={(e) => updateData(act.id, 'goal', e.target.value)} disabled={!isEditable} />
                       </div>
-                      <span style={{fontSize: '0.9rem', fontWeight: '800', color: act.color}}>%{Math.round(prog)}</span>
+                      <span style={{fontSize: '0.9rem', fontWeight: '800', color: accentColor}}>%{Math.round(prog)}</span>
                     </div>
-                    <div className="progress-container"><div className="progress-bar" style={{width: `${prog}%`, backgroundColor: act.color}}></div></div>
+                    <div className="progress-container"><div className="progress-bar" style={{width: `${prog}%`, backgroundColor: accentColor}}></div></div>
                     <div style={{marginTop: '15px', paddingTop: '10px', borderTop: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.75rem', color: 'var(--text-dim)'}}>
                       <span>Haftalık Hedef:</span>
                       <input 
@@ -929,22 +1227,30 @@ function App() {
               <input type="text" placeholder="Örn: Kitap Okuma" value={newName} onChange={(e) => setNewName(e.target.value)} required />
               <input type="number" placeholder={t.dailyGoal} value={newGoal} onChange={(e) => setNewGoal(e.target.value)} required min="1" />
               <input type="number" placeholder={t.weeklyGoal} value={newWeeklyGoal} onChange={(e) => setNewWeeklyGoal(e.target.value)} min="1" />
+              <div className="form-group" style={{width: '100%'}}>
+                <label style={{marginLeft: 0, marginBottom: 5}}>{t.icon}</label>
+                <div className="icon-picker-grid">
+                  {availableIcons.map(iconName => (
+                      <button
+                          type="button"
+                          key={iconName}
+                          className={`icon-picker-btn ${newIcon === iconName ? 'active' : ''}`}
+                          onClick={() => setNewIcon(iconName)}
+                          title={iconName}
+                      >
+                          <Icon name={iconName} size={24} />
+                      </button>
+                  ))}
+                </div>
+              </div>
               <button type="submit" className="add-btn">{t.newActivity}</button>
             </form>}
 
             <div className="chart-card">
               <h2 style={{marginTop:0, marginBottom:'30px'}}>{t.weeklyEfficiency}</h2>
-              <div style={{ width: '100%', height: 300 }}>
-                <ResponsiveContainer>
-                  <LineChart data={generateChartData()}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="var(--border-color)" />
-                    <XAxis dataKey="name" stroke="var(--text-dim)" />
-                    <YAxis stroke="var(--text-dim)" domain={[0, 100]} />
-                    <Tooltip contentStyle={{backgroundColor: 'var(--card-bg)', border: '1px solid var(--border-color)', borderRadius: '8px', color: 'var(--text-main)'}} />
-                    <Line type="monotone" dataKey="Skor" stroke={chartColor} strokeWidth={4} activeDot={{r: 8}} />
-                  </LineChart>
-                </ResponsiveContainer>
-              </div>
+              <Suspense fallback={<div style={{display:'flex', justifyContent:'center', padding:'50px'}}><Loader className="spin" size={32} color={accentColor}/></div>}>
+                <DashboardChart data={generateChartData()} chartColor={chartColor} />
+              </Suspense>
             </div>
           </motion.div>
         )}
@@ -952,15 +1258,17 @@ function App() {
         {activeTab === 'focus' && (
           <motion.div 
             key="focus"
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -10 }}
-            transition={{ duration: 0.2 }}
+            variants={pageVariants}
+            initial="initial"
+            animate="animate"
+            exit="exit"
+            transition={pageTransition}
           >
             <motion.div 
               whileHover={!isFullScreen ? { y: -5 } : {}} 
-              className={`pomodoro-card ${isFullScreen ? 'fullscreen' : ''}`}
+              className={`pomodoro-card ${isFullScreen ? 'fullscreen' : ''} ${isActive ? 'focus-active' : ''}`}
             >
+              {isActive && <div className="focus-background"></div>}
               <button 
                 className="fullscreen-btn"
                 onClick={() => setIsFullScreen(!isFullScreen)}
@@ -976,17 +1284,23 @@ function App() {
                   onChange={(e) => {
                     const val = e.target.value;
                     setPomodoroDuration(val);
-                    if (!isActive && val && parseInt(val) > 0) setTimeLeft(parseInt(val) * 60);
+                    if (!isActive && val && parseInt(val) > 0) {
+                      setTimeLeft(parseInt(val) * 60);
+                      setIsTimerCompleted(false);
+                    }
                   }}
                   style={{padding: '8px', borderRadius: '8px', border: '1px solid var(--border-color)', background: 'var(--input-bg)', color: 'var(--text-main)', width: '60px', textAlign: 'center', fontWeight: 'bold'}}
                   disabled={isActive}
                   min="1"
                 />
               </div>
-              <div className="timer-display">{Math.floor(timeLeft/60)}:{(timeLeft%60).toString().padStart(2,'0')}</div>
+              <div className="timer-display">
+                {Math.floor(timeLeft/60)}:{(timeLeft%60).toString().padStart(2,'0')}
+              </div>
+              {isActive && <div style={{ fontSize: '1.2rem', color: 'var(--text-dim)', marginTop: '-10px', marginBottom: '20px', fontWeight: 500 }}>{currentGoal.text || t.dailyFocus}</div>}
               <div className="timer-controls">
                 <button className="timer-btn" style={{background:'#10b981'}} onClick={() => setIsActive(!isActive)}>{isActive ? t.stop : t.start}</button>
-                <button className="timer-btn" style={{background:'#ef4444'}} onClick={() => {setIsActive(false); setTimeLeft((parseInt(pomodoroDuration) || 25)*60);}}>{t.reset}</button>
+                <button className="timer-btn" style={{background:'#ef4444'}} onClick={() => {setIsActive(false); setTimeLeft((parseInt(pomodoroDuration) || 25)*60); setIsTimerCompleted(false);}}>{t.reset}</button>
               </div>
             </motion.div>
 
@@ -1056,30 +1370,17 @@ function App() {
         {activeTab === 'analytics' && (
           <motion.div 
             key="analytics"
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -10 }}
-            transition={{ duration: 0.2 }}
+            variants={pageVariants}
+            initial="initial"
+            animate="animate"
+            exit="exit"
+            transition={pageTransition}
           >
             <div className="chart-card" style={{marginBottom: '20px'}}>
               <h2 style={{marginTop:0, marginBottom:'30px'}}>{t.performance4Weeks}</h2>
-              <div style={{ width: '100%', height: 250 }}>
-                <ResponsiveContainer>
-                  <AreaChart data={analysisData.chartData} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
-                    <defs>
-                      <linearGradient id="colorUv" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor={chartColor} stopOpacity={0.8}/>
-                        <stop offset="95%" stopColor={chartColor} stopOpacity={0}/>
-                      </linearGradient>
-                    </defs>
-                    <XAxis dataKey="name" stroke="var(--text-dim)" />
-                    <YAxis stroke="var(--text-dim)" domain={[0, 100]} />
-                    <CartesianGrid strokeDasharray="3 3" stroke="var(--border-color)" />
-                    <Tooltip contentStyle={{backgroundColor: 'var(--card-bg)', border: '1px solid var(--border-color)', borderRadius: '8px', color: 'var(--text-main)'}} />
-                    <Area type="monotone" dataKey="Skor" stroke={chartColor} strokeWidth={3} fillOpacity={1} fill="url(#colorUv)" />
-                  </AreaChart>
-                </ResponsiveContainer>
-              </div>
+              <Suspense fallback={<div style={{display:'flex', justifyContent:'center', padding:'50px'}}><Loader className="spin" size={32} color={accentColor}/></div>}>
+                <AnalyticsChart data={analysisData.chartData} chartColor={chartColor} />
+              </Suspense>
             </div>
 
             <div className="stat-card-grid">
@@ -1155,13 +1456,14 @@ function App() {
         {activeTab === 'settings' && (
           <motion.div 
             key="settings"
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -10 }}
-            transition={{ duration: 0.2 }}
+            variants={pageVariants}
+            initial="initial"
+            animate="animate"
+            exit="exit"
+            transition={pageTransition}
           >
             <div className="card">
-              <h2 style={{marginTop: 0, marginBottom: '20px'}}>{t.appSettings}</h2>
+              <h2 className="stats-title">{t.appSettings}</h2>
               <div className="settings-grid">
                 <button onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')} className="settings-btn">
                   {theme === 'dark' ? <Sun size={24} color="#f59e0b"/> : <Moon size={24} color="#3b82f6"/>}
@@ -1173,6 +1475,9 @@ function App() {
                 </button>
                 <button onClick={() => {
                   const newState = !notifications;
+                  if (newState && "Notification" in window) {
+                    Notification.requestPermission();
+                  }
                   setNotifications(newState);
                   localStorage.setItem('appNotifications', JSON.stringify(newState));
                 }} className="settings-btn">
@@ -1183,10 +1488,22 @@ function App() {
                   <Languages size={24} color="#f59e0b"/>
                   <span>{t.language}: {language.toUpperCase()}</span>
                 </button>
+                <button onClick={() => setIsPasswordModalOpen(true)} className="settings-btn">
+                  <Lock size={24} color="#8b5cf6" />
+                  <span>{t.changePassword}</span>
+                </button>
+                <button onClick={handleClearData} className="settings-btn" style={{ color: '#ef4444', borderColor: 'rgba(239, 68, 68, 0.3)' }}>
+                  <Trash size={24} />
+                  <span>{t.clearData}</span>
+                </button>
+                <button onClick={handleDeleteAccount} className="settings-btn" style={{ gridColumn: '1 / -1', background: 'rgba(239, 68, 68, 0.1)', color: '#ef4444', borderColor: 'rgba(239, 68, 68, 0.3)' }}>
+                  <ShieldAlert size={24} />
+                  <span>{t.deleteAccount}</span>
+                </button>
               </div>
 
               <div style={{marginTop: '30px'}}>
-                <h3 style={{fontSize: '1rem', color: 'var(--text-dim)', marginBottom: '15px'}}>{t.colorTheme}</h3>
+                <h3 className="stats-title">{t.colorTheme}</h3>
                 <div className="accent-color-grid">
                   {accentColors.map(c => (
                     <button
@@ -1199,6 +1516,28 @@ function App() {
                       {accentColor === c.value && <Check size={20} color="white" strokeWidth={3} />}
                     </button>
                   ))}
+                </div>
+              </div>
+
+              <div style={{marginTop: '30px'}}>
+                <h3 className="stats-title">{t.alarmSound}</h3>
+                <div className="settings-grid">
+                  <button onClick={() => setAlarmSetting('beep')} className={`settings-btn ${alarmSetting === 'beep' ? 'active' : ''}`}>
+                      <Volume2 size={24} />
+                      <span>{t.beepSound}</span>
+                  </button>
+                  <button onClick={() => setAlarmSetting('chime')} className={`settings-btn ${alarmSetting === 'chime' ? 'active' : ''}`}>
+                      <BellRing size={24} />
+                      <span>{t.chimeSound}</span>
+                  </button>
+                  <button onClick={() => setAlarmSetting('vibrate_only')} className={`settings-btn ${alarmSetting === 'vibrate_only' ? 'active' : ''}`}>
+                      <Vibrate size={24} />
+                      <span>{t.vibrateOnly}</span>
+                  </button>
+                  <button onClick={() => setAlarmSetting('silent')} className={`settings-btn ${alarmSetting === 'silent' ? 'active' : ''}`}>
+                      <VolumeX size={24} />
+                      <span>{t.silent}</span>
+                  </button>
                 </div>
               </div>
             </div>
@@ -1239,12 +1578,39 @@ function App() {
                     <label>{t.username}</label>
                     <input type="text" value={newDisplayName} onChange={(e) => setNewDisplayName(e.target.value)} placeholder={t.username} />
                 </div>
-                <div className="form-group">
-                    <label>{t.photoUrl}</label>
-                    <input type="text" value={newPhotoURL} onChange={(e) => setNewPhotoURL(e.target.value)} placeholder="https://..." />
-                </div>
                 <button type="submit" className="add-btn" style={{width: '100%', marginTop: '10px'}}>{t.save}</button>
               </form>
+
+            {/* Sistem İstatistikleri Paneli */}
+            <div style={{marginTop: '25px'}}>
+              <h3 className="stats-title">{t.systemStats}</h3>
+              
+              <div className="profile-stats-grid">
+                <div className="profile-stat-card">
+                  <Calendar size={24} color="var(--brand-blue)" />
+                  <div className="stat-value">{systemStats?.memberSince}</div>
+                  <div className="stat-label">{t.memberSince}</div>
+                </div>
+
+                <div className="profile-stat-card">
+                  <Clock size={24} color="#10b981" />
+                  <div className="stat-value">{systemStats?.totalHours} {t.hours}</div>
+                  <div className="stat-label">{t.totalFocus}</div>
+                </div>
+
+                <div className="profile-stat-card">
+                  <Activity size={24} color="#f59e0b" />
+                  <div className="stat-value">{analysisData.bestDay || '-'}</div>
+                  <div className="stat-label">{t.mostActive}</div>
+                </div>
+
+                <div className="profile-stat-card">
+                  <CheckCircle size={24} color="#8b5cf6" />
+                  <div className="stat-value">{systemStats?.completedTasks}</div>
+                  <div className="stat-label">{t.totalTasks}</div>
+                </div>
+              </div>
+            </div>
             </motion.div>
           </motion.div>
         )}
@@ -1286,6 +1652,21 @@ function App() {
                   </div>
                 </div>
                 <div className="form-group">
+                    <label>{t.icon}</label>
+                    <div className="icon-picker-grid">
+                      {availableIcons.map(iconName => (
+                          <button
+                              type="button"
+                              key={iconName}
+                              className={`icon-picker-btn ${editingActivity.iconName === iconName ? 'active' : ''}`}
+                              onClick={() => setEditingActivity({...editingActivity, iconName: iconName})}
+                          >
+                              <Icon name={iconName} size={24} />
+                          </button>
+                      ))}
+                    </div>
+                </div>
+                <div className="form-group">
                     <label>{t.colorTheme}</label>
                     <div style={{display:'flex', alignItems:'center', gap:'10px'}}>
                       <input type="color" value={editingActivity.color} onChange={(e) => setEditingActivity({...editingActivity, color: e.target.value})} className="color-picker" />
@@ -1305,6 +1686,108 @@ function App() {
               </form>
             </motion.div>
           </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Fullscreen Scratchpad */}
+      <AnimatePresence>
+        {isScratchpadExpanded && (
+          <motion.div 
+            className="scratchpad-fullscreen"
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.95 }}
+          >
+            <div className="scratchpad-fullscreen-header">
+              <div style={{display: 'flex', gap: '10px'}}>
+                <button className="settings-btn" style={{minHeight: 'auto', padding: '10px'}} onClick={() => setIsScratchpadPreview(!isScratchpadPreview)}>
+                  {isScratchpadPreview ? <><Edit size={20}/> {t.edit}</> : <><Eye size={20}/> {t.preview}</>}
+                </button>
+              </div>
+              <button className="scratchpad-close-btn" onClick={() => setIsScratchpadExpanded(false)}>
+                <Minimize size={24} />
+              </button>
+            </div>
+            
+            {isScratchpadPreview ? (
+              <div className="scratchpad-fullscreen-preview markdown-body">
+                 {scratchpadContent ? (
+                    <Suspense fallback={<div className="loading-text">{t.loading}</div>}>
+                      <ReactMarkdown>{scratchpadContent}</ReactMarkdown>
+                    </Suspense>
+                  ) : (
+                    <div className="scratchpad-empty-preview">Markdown formatında metin yazarak önizlemeyi görün.</div>
+                  )}
+               </div>
+            ) : (
+              <textarea
+                className="scratchpad-fullscreen-textarea"
+                value={scratchpadContent}
+                onChange={(e) => setScratchpadContent(e.target.value)}
+                placeholder={t.typeHere}
+                autoFocus
+              />
+            )}
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Şifre Değiştirme Modalı */}
+      <AnimatePresence>
+        {isPasswordModalOpen && (
+          <motion.div 
+            className="modal-overlay"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={() => setIsPasswordModalOpen(false)}
+          >
+            <motion.div 
+              className="modal-content"
+              initial={{ scale: 0.8, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.8, opacity: 0 }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <button className="modal-close" onClick={() => setIsPasswordModalOpen(false)}><X size={24}/></button>
+              <h2 style={{marginTop: 0, marginBottom: '20px'}}>{t.changePassword}</h2>
+              
+              {user.providerData[0]?.providerId === 'google.com' ? (
+                <div style={{ textAlign: 'center', color: 'var(--text-dim)', padding: '20px' }}>
+                  Google ile giriş yaptığınız için şifre değiştirme işlemi kullanılamaz.
+                </div>
+              ) : (
+                <form onSubmit={handleUpdatePassword} className="edit-form">
+                  <div className="form-group">
+                      <label>{t.currentPassword}</label>
+                      <input type="password" value={currentPassword} onChange={(e) => setCurrentPassword(e.target.value)} required />
+                  </div>
+                  <div className="form-group">
+                      <label>{t.newPassword}</label>
+                      <input type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} required minLength="6" />
+                  </div>
+                  <button type="submit" className="add-btn" style={{width: '100%', marginTop: '10px'}}>{t.save}</button>
+                </form>
+              )}
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Scroll To Top Button */}
+      <AnimatePresence>
+        {showScrollTop && (
+          <motion.button
+            className="scroll-to-top-btn"
+            onClick={scrollToTop}
+            initial={{ opacity: 0, scale: 0.5 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.5 }}
+            whileHover={{ scale: 1.1 }}
+            whileTap={{ scale: 0.9 }}
+          >
+            <ArrowUp size={24} />
+          </motion.button>
         )}
       </AnimatePresence>
         </motion.div>
