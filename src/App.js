@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useMemo, useRef, Suspense } from 'react';
 import { ChevronLeft, ChevronRight, X, Sun, Moon, Flame, Lock, Download, LogOut, Loader, LayoutDashboard, Target, BarChart3, Maximize, Minimize, ArrowUp, ArrowDown, Check, Trash2, Plus, Trophy, Settings, Bell, BellOff, Languages, Sparkles, Calendar, Clock, Activity, CheckCircle, StickyNote, Edit, Eye, BellRing, Vibrate, Volume2, VolumeX, Trash, ShieldAlert, Mail } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import jsPDF from 'jspdf';
+import html2canvas from 'html2canvas';
 import './App.css';
 import Auth from './Auth';
 import Icon from './Icon'; // Yeni Icon bileşenini import et
@@ -299,6 +301,7 @@ function App() {
   const [isIdle, setIsIdle] = useState(false);
   const idleTimer = useRef(null);
   const gridRef = useRef(null);
+  const lastScrollY = useRef(0);
   const fileInputRef = useRef(null);
   const reportCardRef = useRef(null);
   const chartCardRef = useRef(null);
@@ -598,7 +601,6 @@ function App() {
       }, 1000);
     } else { clearInterval(interval); }
     return () => clearInterval(interval);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isActive, timeLeft, notifications, t, currentActivities, pomodoroDuration, user, alarmSetting]);
 
   // Tarayıcı sekmesinde (Title) kalan süreyi göster
