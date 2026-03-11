@@ -1,8 +1,6 @@
 import React, { useState, useEffect, useMemo, useRef, Suspense } from 'react';
-import { ChevronLeft, ChevronRight, X, Sun, Moon, Flame, Lock, Download, LogOut, Loader, LayoutDashboard, Target, BarChart3, Maximize, Minimize, ArrowUp, ArrowDown, Check, Trash2, Plus, Trophy, Settings, Bell, BellOff, Languages, Sparkles, Calendar, Clock, Activity, CheckCircle, StickyNote, Edit, Eye, BellRing, Vibrate, Volume2, VolumeX, Trash, ShieldAlert, Upload } from 'lucide-react';
+import { ChevronLeft, ChevronRight, X, Sun, Moon, Flame, Lock, Download, LogOut, Loader, LayoutDashboard, Target, BarChart3, Maximize, Minimize, ArrowUp, ArrowDown, Check, Trash2, Plus, Trophy, Settings, Bell, BellOff, Languages, Sparkles, Calendar, Clock, Activity, CheckCircle, StickyNote, Edit, Eye, BellRing, Vibrate, Volume2, VolumeX, Trash, ShieldAlert, Mail } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import jsPDF from 'jspdf';
-import html2canvas from 'html2canvas';
 import './App.css';
 import Auth from './Auth';
 import Icon from './Icon'; // Yeni Icon bileşenini import et
@@ -134,7 +132,8 @@ const translations = {
     uploadPhoto: 'Fotoğraf Yükle',
     welcome: 'Merhaba',
     generatedAt: 'Oluşturulma Tarihi:',
-    confirmDeleteAccount: 'Hesabınız ve tüm verileriniz kalıcı olarak silinecektir. Bu işlem geri alınamaz. Emin misiniz?'
+    confirmDeleteAccount: 'Hesabınız ve tüm verileriniz kalıcı olarak silinecektir. Bu işlem geri alınamaz. Emin misiniz?',
+    idleMessage: 'Devam etmek için dokunun'
   },
   en: {
     dashboard: 'Dashboard',
@@ -218,7 +217,8 @@ const translations = {
     uploadPhoto: 'Upload Photo',
     welcome: 'Hello',
     generatedAt: 'Generated At:',
-    confirmDeleteAccount: 'Your account and all your data will be permanently deleted. This action cannot be undone. Are you sure?'
+    confirmDeleteAccount: 'Your account and all your data will be permanently deleted. This action cannot be undone. Are you sure?',
+    idleMessage: 'Touch to continue'
   }
 };
 
@@ -252,12 +252,7 @@ function App() {
   const [user, setUser] = useState(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [currentDate, setCurrentDate] = useState(formatDate(new Date()));
-  const [theme, setTheme] = useState(() => {
-    const savedTheme = localStorage.getItem('appTheme');
-    if (savedTheme) return savedTheme;
-    // Sistem tercihini kontrol et
-    return window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
-  });
+  const [theme, setTheme] = useState(() => localStorage.getItem('appTheme') || 'dark');
   const [historyData, setHistoryData] = useState({});
   const [moods, setMoods] = useState({});
   const [todos, setTodos] = useState([]);
@@ -301,7 +296,8 @@ function App() {
   const [avatarOptions, setAvatarOptions] = useState([]);
   const [selectedAvatar, setSelectedAvatar] = useState('');
   const [isBottomNavVisible, setIsBottomNavVisible] = useState(true);
-  const lastScrollY = useRef(0);
+  const [isIdle, setIsIdle] = useState(false);
+  const idleTimer = useRef(null);
   const gridRef = useRef(null);
   const fileInputRef = useRef(null);
   const reportCardRef = useRef(null);
@@ -321,6 +317,11 @@ function App() {
     } else {
       setActiveTab(tab);
     }
+  };
+
+  const updateData = (id, field, val) => {
+    const updated = currentActivities.map(a => a.id === id ? { ...a, [field]: parseFloat(val) || 0 } : a);
+    setHistoryData({ ...historyData, [currentDate]: updated });
   };
 
   // Firebase Auth Listener & Data Loading
@@ -465,6 +466,26 @@ function App() {
     };
   }, [isMobile, isBottomNavVisible]);
 
+  // Idle detection for screen saver
+  useEffect(() => {
+    const handleActivity = () => {
+      if (isIdle) setIsIdle(false);
+      clearTimeout(idleTimer.current);
+      idleTimer.current = setTimeout(() => {
+        if (!isActive) setIsIdle(true); // Don't go idle if pomodoro is active
+      }, 180000); // 3 minutes
+    };
+
+    const events = ['mousemove', 'keydown', 'click', 'scroll', 'touchstart'];
+    events.forEach(event => window.addEventListener(event, handleActivity));
+    handleActivity(); // Initial call
+
+    return () => {
+      events.forEach(event => window.removeEventListener(event, handleActivity));
+      clearTimeout(idleTimer.current);
+    };
+  }, [isIdle, isActive]);
+
   // AI Mentor text generation based on analysis result and language
   useEffect(() => {
     if (!aiAnalysisResult) {
@@ -577,6 +598,7 @@ function App() {
       }, 1000);
     } else { clearInterval(interval); }
     return () => clearInterval(interval);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isActive, timeLeft, notifications, t, currentActivities, pomodoroDuration, user, alarmSetting]);
 
   // Tarayıcı sekmesinde (Title) kalan süreyi göster
@@ -592,6 +614,20 @@ function App() {
       document.title = 'Daily Flow | Productivity Dashboard';
     }
   }, [isActive, timeLeft, isTimerCompleted, t]);
+
+  // Pomodoro çalışırken sekmeyi kapatmayı önle
+  useEffect(() => {
+    const handleBeforeUnload = (e) => {
+      if (isActive) {
+        e.preventDefault();
+        // Modern tarayıcılar bu mesajı göstermez, standart bir uyarı gösterir.
+        e.returnValue = 'Çalışan bir Pomodoro sayacınız var. Sayfadan ayrılmak istediğinize emin misiniz?';
+      }
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [isActive]);
 
   // ESC tuşu ile tam ekrandan çıkma
   useEffect(() => {
@@ -640,6 +676,25 @@ function App() {
     }
   };
 
+  const handleUpdatePassword = async (e) => {
+    e.preventDefault();
+    if (user && newPassword && currentPassword) {
+      try {
+        const credential = EmailAuthProvider.credential(user.email, currentPassword);
+        await reauthenticateWithCredential(user, credential);
+        
+        await updatePassword(user, newPassword);
+        alert(t.passwordUpdated);
+        setIsPasswordModalOpen(false);
+        setNewPassword('');
+        setCurrentPassword('');
+      } catch (error) {
+        console.error("Error updating password: ", error);
+        alert(error.message);
+      }
+    }
+  };
+
   const handleDownloadReport = async () => {
     if (!reportCardRef.current || !chartCardRef.current) return;
 
@@ -676,25 +731,6 @@ function App() {
       pdf.save(`LifeTrack-Rapor-${formatDate(new Date())}.pdf`);
     } catch (error) {
       console.error("PDF oluşturulurken hata:", error);
-    }
-  };
-
-  const handleUpdatePassword = async (e) => {
-    e.preventDefault();
-    if (user && newPassword && currentPassword) {
-      try {
-        const credential = EmailAuthProvider.credential(user.email, currentPassword);
-        await reauthenticateWithCredential(user, credential);
-        
-        await updatePassword(user, newPassword);
-        alert(t.passwordUpdated);
-        setIsPasswordModalOpen(false);
-        setNewPassword('');
-        setCurrentPassword('');
-      } catch (error) {
-        console.error("Error updating password: ", error);
-        alert(error.message);
-      }
     }
   };
 
@@ -956,11 +992,6 @@ function App() {
     }
   };
 
-  const updateData = (id, field, val) => {
-    const updated = currentActivities.map(a => a.id === id ? { ...a, [field]: parseFloat(val) || 0 } : a);
-    setHistoryData({ ...historyData, [currentDate]: updated });
-  };
-
   const deleteActivity = (id) => {
     const updated = currentActivities.filter(a => a.id !== id);
     setHistoryData({ ...historyData, [currentDate]: updated });
@@ -1000,7 +1031,6 @@ function App() {
         setUser(prevUser => ({
           ...prevUser,
           ...profileUpdates,
-          // Ensure photoURL is updated if selectedAvatar is set
         }));
         setIsProfileModalOpen(false);
         setSelectedAvatar(''); // Seçimi temizle
@@ -1094,6 +1124,26 @@ function App() {
 
   return (
     <div className="dashboard-layout">
+      {/* Idle Screen Saver */}
+      <AnimatePresence>
+        {isIdle && (
+          <motion.div
+            className="idle-overlay"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={() => setIsIdle(false)}
+          >
+            <div className="idle-content">
+              <h1 className="idle-clock">
+                {new Date().toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' })}
+              </h1>
+              <p className="idle-message">{t.idleMessage}</p>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* Odak modundan çıkmak için tıklanabilir arkaplan */}
       <AnimatePresence>
         {isActive && isImmersive && activeTab === 'focus' && !isFullScreen && (
@@ -1251,7 +1301,7 @@ function App() {
           </div>
           </div>
         </motion.div>
-        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="app-container">
+        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="app-container" style={{paddingTop: '0'}}>
 
       <AnimatePresence mode='wait'>
         {activeTab === 'dashboard' && (
@@ -1304,7 +1354,7 @@ function App() {
               </div>
             </motion.div>
 
-            <div className={isMobile ? "grid" : "grid desktop-grid"} ref={gridRef} onScroll={handleScroll}>
+            <div className="grid" ref={gridRef} onScroll={handleScroll}>
               <AnimatePresence mode='popLayout'>
               {currentActivities.map((act, index) => {
                 const prog = Math.min((act.value / (act.goal || 1)) * 100, 100);
@@ -1325,15 +1375,13 @@ function App() {
                       // Mobilde yukarı kaydırınca sil (Yatay kaydırma navigasyon için kullanılıyor)
                       if (offset.y < -100 && isEditable) deleteActivity(act.id);
                     }}
-                    onClick={() => setEditingActivity(act)} // Mobilde her zaman tıklanabilir olsun (Edit modalı için)
-                    onDragStart={(e) => {
-                      if (e.dataTransfer) e.dataTransfer.setData('text/plain', index);
-                    }}
+                    onClick={() => isEditable && setEditingActivity(act)}
+                    onDragStart={(e) => e.dataTransfer.setData('text/plain', index)}
                     onDragOver={(e) => e.preventDefault()}
                     onDrop={(e) => {
                       e.preventDefault();
-                      if (!isEditable || !e.dataTransfer) return;
-                      const dragIndex = parseInt(e.dataTransfer.getData('text/plain'), 10);
+                      if (!isEditable) return;
+                      const dragIndex = parseInt(e.dataTransfer.getData('text/plain'));
                       if (dragIndex === index) return;
                       const newArr = [...currentActivities];
                       const [moved] = newArr.splice(dragIndex, 1);
@@ -1468,7 +1516,10 @@ function App() {
               </div>
               {isActive && <div style={{ fontSize: '1.2rem', color: 'var(--text-dim)', marginTop: '-10px', marginBottom: '20px', fontWeight: 500 }}>{currentGoal.text || t.dailyFocus}</div>}
               <div className="timer-controls">
-                <button className="timer-btn" style={{background:'#10b981'}} onClick={() => setIsActive(!isActive)}>{isActive ? t.stop : t.start}</button>
+                <button className="timer-btn" style={{background:'#10b981'}} onClick={() => {
+                  if (!isActive) setIsImmersive(true);
+                  setIsActive(!isActive);
+                }}>{isActive ? t.stop : t.start}</button>
                 <button className="timer-btn" style={{background:'#ef4444'}} onClick={() => {setIsActive(false); setTimeLeft((parseInt(pomodoroDuration) || 25)*60); setIsTimerCompleted(false);}}>{t.reset}</button>
               </div>
             </motion.div>
@@ -1548,7 +1599,7 @@ function App() {
             exit="exit"
             transition={pageTransition}
           >
-            <div className="chart-card" style={{marginBottom: '20px'}}>
+            <div className="chart-card" style={{marginBottom: '20px'}} ref={chartCardRef}>
               <h2 style={{marginTop:0, marginBottom:'30px'}}>{t.performance4Weeks}</h2>
               <Suspense fallback={<div style={{display:'flex', justifyContent:'center', padding:'50px'}}><Loader className="spin" size={32} color={accentColor}/></div>}>
                 <AnalyticsChart data={analysisData.chartData} chartColor={chartColor} />
@@ -1748,6 +1799,15 @@ function App() {
                 )}
                 <h2 style={{margin: '10px 0 5px 0'}}>{user.displayName || 'Kullanıcı'}</h2>
                 <p style={{color: 'var(--text-dim)', margin: 0}}>{user.email}</p>
+                
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '5px', marginTop: '10px', fontSize: '0.8rem', color: 'var(--text-dim)' }}>
+                  {user.providerData[0]?.providerId === 'google.com' ? (
+                    <><svg width="16" height="16" viewBox="0 0 24 24"><path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/><path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/><path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/><path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/></svg> Google ile giriş yapıldı</>
+                  ) : (
+                    <><Mail size={16} /> E-posta ile giriş yapıldı</>
+                  )}
+                </div>
+
               </div>
               
               <form onSubmit={handleUpdateProfile} className="edit-form">

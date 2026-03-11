@@ -1221,3 +1221,23 @@ input::-webkit-outer-spin-button, input::-webkit-inner-spin-button { -webkit-app
   50% { transform: scale(1.1); opacity: 0.8; }
   100% { transform: scale(1); opacity: 1; }
 }
+
+.desktop-grid {
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+}
+
+.loading-text {
+  color: var(--text-dim);
+  text-align: center;
+  padding: 20px;
+}
+
+@keyframes float {
+  0% { transform: translateY(0px); }
+  50% { transform: translateY(-10px); }
+  100% { transform: translateY(0px); }
+}
+
+.modal-avatar {
+  cursor: pointer;
+}
