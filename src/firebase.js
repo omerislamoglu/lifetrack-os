@@ -1,6 +1,6 @@
 import { initializeApp } from "firebase/app";
 import { getAuth } from "firebase/auth";
-import { getFirestore } from "firebase/firestore";
+import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager } from "firebase/firestore";
 
 // Senin kopyaladığın gerçek bilgiler:
 const firebaseConfig = {
@@ -18,5 +18,12 @@ const app = initializeApp(firebaseConfig);
 
 // Uygulama içinde kullanacağımız servisleri dışarı aktar
 export const auth = getAuth(app);
-export const db = getFirestore(app);
+
+// Firestore'u çevrimdışı kalıcılık ile başlat
+export const db = initializeFirestore(app, {
+  localCache: persistentLocalCache({
+    tabManager: persistentMultipleTabManager()
+  })
+});
+
 export default app;
