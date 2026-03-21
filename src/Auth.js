@@ -1,12 +1,15 @@
 import React, { useState } from 'react';
-import { Mail, Lock, Loader, LogIn, UserPlus } from 'lucide-react';
-import { auth } from './firebase';
+import { Mail, Lock, Loader, LogIn, UserPlus, User } from 'lucide-react';
+import { auth, signInWithGoogle } from './firebase';
 import { motion } from 'framer-motion';
-import { createUserWithEmailAndPassword, signInWithEmailAndPassword, GoogleAuthProvider, signInWithPopup, sendPasswordResetEmail } from 'firebase/auth';
-import './App.css'; // Stilleri App.css'den alıyoruz
+import { createUserWithEmailAndPassword, signInWithEmailAndPassword, GoogleAuthProvider, signInWithPopup, sendPasswordResetEmail, OAuthProvider, signInWithCredential, updateProfile } from 'firebase/auth';
+import './App.css'; 
+import { Capacitor } from '@capacitor/core';
+import { FirebaseAuthentication } from '@capacitor-firebase/authentication';
 
 export default function Auth() {
   const [isLogin, setIsLogin] = useState(true);
+  const [username, setUsername] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
@@ -22,7 +25,14 @@ export default function Auth() {
       if (isLogin) {
         await signInWithEmailAndPassword(auth, email, password);
       } else {
-        await createUserWithEmailAndPassword(auth, email, password);
+        if (!username.trim()) {
+          setError('Lütfen bir kullanıcı adı belirleyin.');
+          setLoading(false);
+          return;
+        }
+        localStorage.setItem('temp_username', username);
+        const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+        await updateProfile(userCredential.user, { displayName: username });
       }
       // Başarılı olursa App.js içindeki auth listener (onAuthStateChanged) durumu yakalayacaktır.
     } catch (err) {
@@ -44,16 +54,53 @@ export default function Auth() {
   const handleGoogleLogin = async () => {
     setLoading(true);
     setError('');
-    const provider = new GoogleAuthProvider();
     try {
-      await signInWithPopup(auth, provider);
-      // Başarılı olursa App.js yakalar
+      if (Capacitor.isNativePlatform()) {
+        await signInWithGoogle();
+      } else {
+        const provider = new GoogleAuthProvider();
+        await signInWithPopup(auth, provider);
+      }
     } catch (err) {
       console.error("Google Login Hatası:", err);
       let msg = err.message;
-      if (msg.includes('auth/api-key-not-valid')) msg = 'Firebase API anahtarı geçersiz. Lütfen firebase.js dosyasındaki yapılandırma ayarlarını kontrol edin.';
-      if (msg.includes('auth/network-request-failed')) msg = 'Bağlantı hatası. İnternet bağlantınızı veya Firebase yapılandırma ayarlarınızı (firebase.js) kontrol edin.';
+      if (msg.includes('canceled') || msg.includes('cancelled')) msg = 'Giriş işlemi iptal edildi.';
+      else if (msg.includes('auth/api-key-not-valid')) msg = 'Firebase API anahtarı geçersiz.';
+      else if (msg.includes('auth/network-request-failed')) msg = 'Bağlantı hatası. Lütfen internetinizi kontrol edin.';
+      else msg = 'Giriş yapılamadı, lütfen tekrar deneyin.';
+      
       setError(msg);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // İŞTE SİHRİN GERÇEKLEŞTİĞİ YER BURASI!
+  const handleAppleLogin = async () => {
+    setLoading(true);
+    setError('');
+    try {
+      // 1. Native ekrandan FaceID/Parola onayı alınır
+      const result = await FirebaseAuthentication.signInWithApple();
+      
+      // 2. Gelen Apple biletini (token), uygulamanın ana kapısına (auth) teslim ediyoruz
+      if (result.credential && result.credential.idToken) {
+        const provider = new OAuthProvider('apple.com');
+        const credential = provider.credential({
+          idToken: result.credential.idToken,
+          rawNonce: result.credential.nonce
+        });
+        
+        // Bu komut App.js'e "Kapıyı aç!" mesajı gönderir
+        await signInWithCredential(auth, credential); 
+        
+      } else {
+        throw new Error('Apple kimlik bilgisi alınamadı.');
+      }
+    } catch (err) {
+      console.error("Apple Giriş Hatası:", err);
+      setError('Apple ile giriş işlemi tamamlanamadı.');
+    } finally {
       setLoading(false);
     }
   };
@@ -89,6 +136,15 @@ export default function Auth() {
         {resetSent && <div style={{background: 'rgba(16, 185, 129, 0.2)', color:'#10b981', padding:'10px', borderRadius:'12px', marginBottom:'20px', fontSize:'0.9rem', border: '1px solid rgba(16, 185, 129, 0.3)'}}>Şifre sıfırlama bağlantısı gönderildi!</div>}
 
         <form onSubmit={handleSubmit} className="auth-form">
+            {!isLogin && (
+                <div className="glass-input-group">
+                    <User className="input-icon" size={20} />
+                    <input 
+                        type="text" placeholder="Kullanıcı Adı" className="glass-input"
+                        value={username} onChange={(e) => setUsername(e.target.value)} required
+                    />
+                </div>
+            )}
             <div className="glass-input-group">
                 <Mail className="input-icon" size={20} />
                 <input 
@@ -106,7 +162,9 @@ export default function Auth() {
             </div>
 
             {isLogin && (
-              <div style={{textAlign: 'right', marginTop: '-10px'}}><button type="button" onClick={handleResetPassword} style={{background:'none', border:'none', color:'var(--text-dim)', fontSize:'0.85rem', cursor:'pointer', textDecoration:'underline'}}>Şifremi Unuttum</button></div>
+              <div style={{textAlign: 'right', marginTop: '-10px'}}>
+                <button type="button" onClick={handleResetPassword} style={{background:'none', border:'none', color:'var(--text-dim)', fontSize:'0.85rem', cursor:'pointer', textDecoration:'underline'}}>Şifremi Unuttum</button>
+              </div>
             )}
 
             <button type="submit" className="auth-btn" disabled={loading}>
@@ -114,6 +172,13 @@ export default function Auth() {
             </button>
 
             <div className="auth-separator"><span>veya</span></div>
+
+            <button type="button" className="apple-btn" onClick={handleAppleLogin} disabled={loading}>
+              <svg width="20" height="20" viewBox="0 0 384 512" fill="white">
+                <path d="M318.7 268.7c-.2-36.7 16.4-64.4 50-84.8-18.8-26.9-47.2-41.7-84.7-44.6-35.5-2.8-74.3 20.7-88.5 20.7-15 0-49.4-19.7-76.4-19.7C63.3 141.2 4 184.8 4 273.5q0 39.3 14.4 81.2c12.8 36.7 59 126.7 107.2 125.2 25.2-.6 43-17.9 75.8-17.9 31.8 0 48.3 17.9 76.4 17.9 48.6-.7 90.4-82.5 102.6-119.3-65.2-30.7-61.7-90-61.7-91.9zm-56.6-164.2c27.3-32.4 24.8-61.9 24-72.5-24.1 1.4-52 16.4-67.9 34.9-17.5 19.8-27.8 44.3-25.6 71.9 26.1 2 49.9-11.4 69.5-34.3z"/>
+              </svg>
+              Apple ile Devam Et
+            </button>
 
             <button type="button" className="google-btn" onClick={handleGoogleLogin} disabled={loading}>
               <svg width="20" height="20" viewBox="0 0 24 24">

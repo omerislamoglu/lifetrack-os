@@ -2,9 +2,10 @@
 
 import { clientsClaim } from 'workbox-core';
 import { ExpirationPlugin } from 'workbox-expiration';
+import { CacheableResponsePlugin } from 'workbox-cacheable-response';
 import { precacheAndRoute, createHandlerBoundToURL } from 'workbox-precaching';
 import { registerRoute } from 'workbox-routing';
-import { StaleWhileRevalidate, CacheFirst } from 'workbox-strategies';
+import { StaleWhileRevalidate, CacheFirst, NetworkFirst } from 'workbox-strategies';
 
 clientsClaim();
 
@@ -53,15 +54,69 @@ registerRoute(
   })
 );
 
+// Cache external images (like avatars from Flaticon)
+registerRoute(
+  ({ request, url }) => request.destination === 'image' && url.origin.includes('flaticon'),
+  new StaleWhileRevalidate({
+    cacheName: 'external-images',
+    plugins: [
+      new CacheableResponsePlugin({
+        statuses: [0, 200],
+      }),
+      new ExpirationPlugin({
+        maxEntries: 60,
+        maxAgeSeconds: 30 * 24 * 60 * 60, // 30 Days
+      }),
+    ],
+  })
+);
+
 // Cache Google Fonts
 registerRoute(
   ({url}) => url.origin === 'https://fonts.googleapis.com' || url.origin === 'https://fonts.gstatic.com',
   new CacheFirst({
     cacheName: 'google-fonts',
     plugins: [
+      new CacheableResponsePlugin({
+        statuses: [0, 200],
+      }),
       new ExpirationPlugin({
         maxEntries: 30,
         maxAgeSeconds: 60 * 60 * 24 * 365, // 1 Year
+      }),
+    ],
+  })
+);
+
+// Cache Firestore data requests
+registerRoute(
+  ({ url }) => url.origin === 'https://firestore.googleapis.com',
+  new NetworkFirst({
+    cacheName: 'firestore-data',
+    plugins: [
+      new ExpirationPlugin({
+        maxEntries: 50,
+        maxAgeSeconds: 30 * 24 * 60 * 60, // 30 Days
+      }),
+      new CacheableResponsePlugin({
+        statuses: [0, 200],
+      }),
+    ],
+  })
+);
+
+// Cache external audio files (alarms)
+registerRoute(
+  ({ url }) => url.origin === 'https://cdn.pixabay.com',
+  new CacheFirst({
+    cacheName: 'audio-files',
+    plugins: [
+      new CacheableResponsePlugin({
+        statuses: [0, 200],
+      }),
+      new ExpirationPlugin({
+        maxEntries: 10,
+        maxAgeSeconds: 365 * 24 * 60 * 60, // 1 Year
       }),
     ],
   })

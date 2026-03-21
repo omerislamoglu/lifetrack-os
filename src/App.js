@@ -1,14 +1,18 @@
-import React, { useState, useEffect, useMemo, useRef, Suspense } from 'react';
-import { ChevronLeft, ChevronRight, X, Sun, Moon, Flame, Lock, Download, LogOut, Loader, LayoutDashboard, Target, BarChart3, Maximize, Minimize, ArrowUp, ArrowDown, Check, Trash2, Plus, Trophy, Settings, Bell, BellOff, Languages, Sparkles, Calendar, Clock, Activity, CheckCircle, StickyNote, Edit, Eye, BellRing, Vibrate, Volume2, VolumeX, Trash, ShieldAlert, Mail } from 'lucide-react';
+import React, { useState, useRef, useEffect, Suspense, useMemo } from 'react';
+import { ChevronLeft, ChevronRight, X, Sun, Moon, Flame, Lock, Download, Loader, LayoutDashboard, Target, BarChart3, Maximize, Minimize, ArrowUp, ArrowDown, Check, Trash2, Plus, Trophy, Settings, Bell, BellOff, Languages, Sparkles, Calendar, Clock, Activity, CheckCircle, StickyNote, Edit, Eye, VolumeX, Trash, ShieldAlert, CloudRain, Coffee, TreePine, ListTodo, Music, BookOpen, Brain, Wind, Crown } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { ResponsiveContainer, AreaChart, Area, BarChart, Bar, PieChart, Pie, Cell, Tooltip as RechartsTooltip, CartesianGrid, XAxis, YAxis } from 'recharts';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
 import './App.css';
 import Auth from './Auth';
-import Icon from './Icon'; // Yeni Icon bileşenini import et
+import Icon from './Icon';
 import { auth, db } from './firebase';
-import { onAuthStateChanged, signOut, updateProfile, updatePassword, reauthenticateWithCredential, EmailAuthProvider, deleteUser } from 'firebase/auth';
+import { onAuthStateChanged, updateProfile, updatePassword, reauthenticateWithCredential, EmailAuthProvider, deleteUser, signOut } from 'firebase/auth';
 import { doc, getDoc, setDoc, deleteDoc } from 'firebase/firestore';
+import { updateAllWidgets } from './widgetService';
+import { hasActivePremiumEntitlement, hasRevenueCatKey, initializePremiumSession, isPremiumPlatformSupported, purchasePremiumPackage, restorePremiumPurchases } from './premiumService';
+import { Purchases } from '@revenuecat/purchases-capacitor';
 
 const defaultActivities = [
   { id: 1, name: 'Ders (Saat)', iconName: 'Book', value: 0, goal: 6, weeklyGoal: 42, color: '#3b82f6' },
@@ -20,7 +24,7 @@ const DashboardChart = React.lazy(() => import('./DashboardChart'));
 const AnalyticsChart = React.lazy(() => import('./AnalyticsChart'));
 const ReactMarkdown = React.lazy(() => import('react-markdown'));
 
-const availableIcons = ['BookOpen', 'Dumbbell', 'Terminal', 'Code', 'Brain', 'Target', 'Bike', 'Coffee', 'Film', 'Music', 'PenTool', 'Heart', 'TrendingUp', 'Zap', 'BarChart', 'Briefcase', 'DollarSign', 'Globe', 'Home', 'Mic', 'Camera'];
+const availableIcons = ['Book', 'Dumbbell', 'Terminal', 'Code', 'Brain', 'Target', 'Bike', 'Coffee', 'Film', 'Music', 'PenTool', 'Heart', 'TrendingUp', 'Zap', 'BarChart', 'Briefcase', 'DollarSign', 'Globe', 'Home', 'Mic', 'Camera'];
 
 const avatarOptionsList = [
   'https://cdn-icons-png.flaticon.com/512/1326/1326405.png', // Girl 1
@@ -31,10 +35,6 @@ const avatarOptionsList = [
   'https://cdn-icons-png.flaticon.com/512/1326/1326413.png', // Boy 3
   'https://cdn-icons-png.flaticon.com/512/1326/1326368.png', // Girl 4
   'https://cdn-icons-png.flaticon.com/512/1326/1326403.png', // Boy 4
-  'https://cdn-icons-png.flaticon.com/512/1326/1326370.png', // Girl 5
-  'https://cdn-icons-png.flaticon.com/512/1326/1326419.png', // Boy 5
-  'https://cdn-icons-png.flaticon.com/512/1326/1326358.png', // Girl 6
-  'https://cdn-icons-png.flaticon.com/512/1326/1326392.png', // Boy 6
 ];
 const generateAvatars = () => avatarOptionsList;
 
@@ -45,11 +45,75 @@ const formatDate = (date) => {
   return `${y}-${m}-${d}`;
 };
 
-// UI için Gün isimli tarih gösterimi (Örn: 10 Mart Salı)
 const getDisplayDate = (dateString) => {
   const dateObj = new Date(dateString);
   return dateObj.toLocaleDateString('tr-TR', { day: 'numeric', month: 'long', weekday: 'long' });
 };
+
+// Helper function to lighten color
+const lightenColor = (color, percent) => {
+  const num = parseInt(color.replace('#', ''), 16);
+  const amt = Math.round(2.55 * percent);
+  const R = Math.min(255, (num >> 16) + amt);
+  const G = Math.min(255, ((num >> 8) & 0x00FF) + amt);
+  const B = Math.min(255, (num & 0x0000FF) + amt);
+  return '#' + (0x1000000 + (R < 255 ? R : 255) * 0x10000 +
+    (G < 255 ? G : 255) * 0x100 + (B < 255 ? B : 255))
+    .toString(16).slice(1);
+};
+
+const SafeChartContainer = ({ height = 200, minHeight = 1, children, debounce = 0 }) => {
+  const containerRef = useRef(null);
+  const [isReady, setIsReady] = useState(false);
+
+  useEffect(() => {
+    const updateReadyState = () => {
+      const element = containerRef.current;
+      const hasValidSize = Boolean(element && element.clientWidth > 10 && element.clientHeight > 10);
+      setIsReady(hasValidSize);
+    };
+
+    updateReadyState();
+
+    let observer;
+    if (typeof ResizeObserver !== 'undefined' && containerRef.current) {
+      observer = new ResizeObserver(updateReadyState);
+      observer.observe(containerRef.current);
+    }
+
+    window.addEventListener('resize', updateReadyState);
+
+    return () => {
+      if (observer) observer.disconnect();
+      window.removeEventListener('resize', updateReadyState);
+    };
+  }, []);
+
+  return (
+    <div ref={containerRef} style={{ width: '100%', height: `${height}px`, minHeight: `${minHeight}px`, display: 'block' }}>
+      {isReady ? (
+        <ResponsiveContainer width="99%" height="100%" minWidth={1} minHeight={Math.max(1, minHeight)} debounce={debounce}>
+          {children}
+        </ResponsiveContainer>
+      ) : null}
+    </div>
+  );
+};
+
+// Mini Trend Chart Component
+const MiniTrendChart = ({ data, color }) => (
+  <SafeChartContainer height={40} minHeight={40} debounce={60}>
+      <AreaChart data={data} margin={{ top: 5, right: 5, left: -25, bottom: 5 }}>
+        <defs>
+          <linearGradient id={`miniGrad-${color}`} x1="0" y1="0" x2="0" y2="1">
+            <stop offset="5%" stopColor={lightenColor(color, 20)} stopOpacity={0.3} />
+            <stop offset="95%" stopColor={lightenColor(color, 20)} stopOpacity={0} />
+          </linearGradient>
+        </defs>
+        <Area type="monotone" dataKey="value" stroke={lightenColor(color, 10)} fill={`url(#miniGrad-${color})`} isAnimationActive={false} />
+      </AreaChart>
+  </SafeChartContainer>
+);
 
 const translations = {
   tr: {
@@ -76,7 +140,7 @@ const translations = {
     recordStreak: 'Rekor Seri',
     longestChain: 'En uzun zincir',
     vsLastWeek: 'vs geçen hafta',
-    weeklyReport: 'Haftalık Analiz Raporu',
+    monthlyReport: 'Aylık Analiz Raporu',
     appSettings: 'Uygulama Ayarları',
     changeTheme: 'Tema Değiştir',
     downloadData: 'Verileri İndir',
@@ -126,8 +190,6 @@ const translations = {
     currentPassword: 'Mevcut Şifre',
     newPassword: 'Yeni Şifre',
     passwordUpdated: 'Şifreniz başarıyla güncellendi.',
-    clearData: 'Verileri Temizle',
-    confirmClear: 'Tüm verileriniz silinecek. Emin misiniz?',
     deleteAccount: 'Hesabı Sil',
     downloadReport: 'Raporu İndir (PDF)',
     chooseAvatar: 'Avatar Seç',
@@ -135,7 +197,33 @@ const translations = {
     welcome: 'Merhaba',
     generatedAt: 'Oluşturulma Tarihi:',
     confirmDeleteAccount: 'Hesabınız ve tüm verileriniz kalıcı olarak silinecektir. Bu işlem geri alınamaz. Emin misiniz?',
-    idleMessage: 'Devam etmek için dokunun'
+    idleMessage: 'Devam etmek için dokunun',
+    ambientSound: 'Arka Plan Sesi',
+    none: 'Yok',
+    natureRain: 'Yağmur',
+    cafe: 'Kafe Ortamı',
+    fireplace: 'Şömine',
+    forest: 'Orman',
+    library: 'Kütüphane',
+    lofi: 'LoFi Müzik',
+    meditation: 'Meditasyon',
+    whiteNoise: 'Beyaz Gürültü',
+    proFeature: 'PRO Özelliği',
+    proUpgrade: "PRO'ya Geç",
+    proLockedMessage: 'Aylık Detaylı Analiz Raporu ve PDF Çıktısı PRO üyelerimize özeldir. Performansınızı zirveye taşımak için yükseltin!',
+    ambientProMessage: 'Arka plan sesleri PRO üyelerimize özeldir. Rahat çalışma ortamı için yükseltin!',
+    mentorTab: 'Mentor',
+    openMentor: 'Mentor Sekmesini Aç',
+    mentorFocus: 'Bu haftanin odak ozeti',
+    threeDayReport: '3 Gunluk Rapor',
+    premiumTitle: 'LifeTrack PRO',
+    premiumSubtitle: 'AI Mentor, 7 gunluk analiz, detayli raporlar ve premium odak araclarini ac.',
+    restorePurchases: 'Satin Alimlari Geri Yukle',
+    premiumUnavailable: 'PRO satin alma ekrani sadece iOS uygulamasinda aktif.',
+    premiumStoreUnavailable: 'Su anda magaza paketleri yuklenemedi. Tekrar deneyin.',
+    goalBuilderTitle: 'Hedeflerini olustur',
+    goalBuilderDescription: 'Dashboard kartlarini gunluk ve haftalik hedeflerle aninda sekillendir.',
+    backToToday: 'Bugune Don'
   },
   en: {
     dashboard: 'Dashboard',
@@ -161,7 +249,7 @@ const translations = {
     recordStreak: 'Record Streak',
     longestChain: 'Longest chain',
     vsLastWeek: 'vs last week',
-    weeklyReport: 'Weekly Analysis Report',
+    monthlyReport: 'Monthly Analysis Report',
     appSettings: 'App Settings',
     changeTheme: 'Change Theme',
     downloadData: 'Download Data',
@@ -195,10 +283,10 @@ const translations = {
     hours: 'Hours',
     askMentor: 'Ask Mentor',
     analyzing: 'Analyzing data...',
-    reportJump: 'area saw a great jump! {change}% more productive than last week.',
-    reportDrop: 'area saw a drop. {change}% less than last week. You might want to focus here.',
-    reportStable: 'area shows steady progress.',
-    reportMaintain: 'area performance is maintained from last week.',
+    reportJump: 'is doing great! %{change} more productive than last week.',
+    reportDrop: 'has seen a dip. %{change} less than last week. You can refocus here.',
+    reportStable: 'is making steady progress.',
+    reportMaintain: 'maintaining your performance from last week.',
     preview: 'Preview',
     edit: 'Edit',
     expand: 'Expand',
@@ -211,32 +299,67 @@ const translations = {
     currentPassword: 'Current Password',
     newPassword: 'New Password',
     passwordUpdated: 'Password updated successfully.',
-    clearData: 'Clear Data',
-    confirmClear: 'All your data will be deleted. Are you sure?',
     deleteAccount: 'Delete Account',
     downloadReport: 'Download Report (PDF)',
     chooseAvatar: 'Choose Avatar',
     uploadPhoto: 'Upload Photo',
-    welcome: 'Hello',
-    generatedAt: 'Generated At:',
-    confirmDeleteAccount: 'Your account and all your data will be permanently deleted. This action cannot be undone. Are you sure?',
-    idleMessage: 'Touch to continue'
+    welcome: 'Welcome',
+    generatedAt: 'Generated:',
+    confirmDeleteAccount: 'Your account and all data will be permanently deleted. This cannot be undone. Are you sure?',
+    idleMessage: 'Touch to continue',
+    ambientSound: 'Ambient Sound',
+    none: 'None',
+    natureRain: 'Rain',
+    cafe: 'Cafe',
+    fireplace: 'Fireplace',
+    forest: 'Forest',
+    library: 'Library',
+    lofi: 'LoFi Music',
+    meditation: 'Meditation',
+    whiteNoise: 'White Noise',
+    proFeature: 'PRO Feature',
+    proUpgrade: 'Go PRO',
+    proLockedMessage: 'Detailed Monthly Analytics Report and PDF Export are exclusive to our PRO members. Upgrade to take your performance to the next level!',
+    ambientProMessage: 'Ambient sounds are exclusive to PRO members. Upgrade for a comfortable study environment!',
+    mentorTab: 'Mentor',
+    openMentor: 'Open Mentor Tab',
+    mentorFocus: 'This week focus summary',
+    threeDayReport: '3 Day Report',
+    premiumTitle: 'LifeTrack PRO',
+    premiumSubtitle: 'Unlock AI Mentor, 7 day analysis, detailed reports, and premium focus tools.',
+    restorePurchases: 'Restore Purchases',
+    premiumUnavailable: 'The PRO purchase screen is only active in the iOS app.',
+    premiumStoreUnavailable: 'Store packages could not be loaded right now. Please try again.',
+    goalBuilderTitle: 'Build your goals',
+    goalBuilderDescription: 'Shape your dashboard cards instantly with daily and weekly targets.',
+    backToToday: 'Back To Today'
   }
 };
 
-const accentColors = [
-  { value: '#3b82f6', label: 'Mavi' },
-  { value: '#10b981', label: 'Yeşil' },
-  { value: '#8b5cf6', label: 'Mor' },
-  { value: '#f59e0b', label: 'Turuncu' },
-  { value: '#ec4899', label: 'Pembe' },
-  { value: '#ef4444', label: 'Kırmızı' },
-];
+const ambientSounds = {
+  // Free Sounds
+  none: null,
+
+  // Legacy ambient set
+  natureRain: 'https://actions.google.com/sounds/v1/water/rain_on_roof.ogg',
+  cafe: 'https://actions.google.com/sounds/v1/ambiences/coffee_shop.ogg',
+  fireplace: 'https://actions.google.com/sounds/v1/ambiences/fire.ogg',
+  forest: 'https://actions.google.com/sounds/v1/ambiences/outdoor_summer_ambience.ogg',
+};
 
 const alarmSounds = {
-  beep: 'https://actions.google.com/sounds/v1/alarms/beep_short.ogg',
-  chime: 'https://actions.google.com/sounds/v1/alarms/alarm_clock.ogg',
+  beep: 'https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3',
+  chime: 'https://assets.mixkit.co/active_storage/sfx/113/113-preview.mp3',
 };
+
+const accentColors = [
+  { value: '#3b82f6', label: 'Blue' },
+  { value: '#10b981', label: 'Green' },
+  { value: '#8b5cf6', label: 'Purple' },
+  { value: '#ef4444', label: 'Red' },
+  { value: '#ec4899', label: 'Pink' },
+  { value: '#f59e0b', label: 'Amber' },
+];
 
 const pageVariants = {
   initial: { opacity: 0, x: 20, scale: 0.98 },
@@ -254,18 +377,35 @@ function App() {
   const [user, setUser] = useState(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [currentDate, setCurrentDate] = useState(formatDate(new Date()));
-  const [theme, setTheme] = useState(() => localStorage.getItem('appTheme') || 'dark');
+  const [theme, setTheme] = useState(() => {
+    const savedTheme = localStorage.getItem('appTheme');
+    if (savedTheme) return savedTheme;
+    return window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+  });
   const [historyData, setHistoryData] = useState({});
   const [moods, setMoods] = useState({});
   const [todos, setTodos] = useState([]);
   const [dailyGoals, setDailyGoals] = useState({});
   const [newTodo, setNewTodo] = useState('');
   const [activeTab, setActiveTab] = useState('dashboard');
-  
+
   const [newName, setNewName] = useState('');
   const [newGoal, setNewGoal] = useState('');
   const [newWeeklyGoal, setNewWeeklyGoal] = useState('');
-  const [newIcon, setNewIcon] = useState('Activity');
+  const [newIcon, setNewIcon] = useState('Book');
+
+  // PRO Kilidi State'leri
+  // FORCE PRO - Premium state'i herzaman true
+  const [isPremiumUser, setIsPremiumUser] = useState(true);
+  const [isPremiumModalOpen, setIsPremiumModalOpen] = useState(false);
+  const [premiumPackages, setPremiumPackages] = useState([]);
+  const [isPremiumLoading, setIsPremiumLoading] = useState(false);
+  const [isPremiumCtaLoading, setIsPremiumCtaLoading] = useState(false);
+  const [premiumError, setPremiumError] = useState('');
+  const [activePurchaseId, setActivePurchaseId] = useState('');
+  const [isRestoringPurchases, setIsRestoringPurchases] = useState(false);
+  const [isCloudSyncEnabled, setIsCloudSyncEnabled] = useState(true);
+  const hasShownCloudSyncWarningRef = useRef(false);
 
   // Pomodoro
   const [pomodoroDuration, setPomodoroDuration] = useState(25);
@@ -279,6 +419,7 @@ function App() {
   const [language, setLanguage] = useState(() => localStorage.getItem('appLanguage') || 'tr');
   const [accentColor, setAccentColor] = useState(() => localStorage.getItem('appAccentColor') || '#3b82f6');
   const [alarmSetting, setAlarmSetting] = useState(() => localStorage.getItem('appAlarmSetting') || 'beep');
+  const [ambientSound, setAmbientSound] = useState(() => localStorage.getItem('appAmbientSound') || 'none');
   const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
   const [isTimerCompleted, setIsTimerCompleted] = useState(false);
   const [isImmersive, setIsImmersive] = useState(false);
@@ -304,22 +445,58 @@ function App() {
   const lastScrollY = useRef(0);
   const fileInputRef = useRef(null);
   const reportCardRef = useRef(null);
-  const chartCardRef = useRef(null);
+  const ambientAudioRef = useRef(null);
   const scrollTimeout = useRef(null);
 
   const isEditable = currentDate === formatDate(new Date());
   const t = translations[language];
+  const displayUsername = user?.displayName || localStorage.getItem('temp_username') || 'Kullanıcı';
 
-  // Handle case where data for the current day might not exist yet
-  // Eğer o gün için veri yoksa, varsayılan aktiviteleri 0 değerleriyle göster
-  const currentActivities = historyData[currentDate] || defaultActivities.map(a => ({ ...a, value: 0 }));
+  const currentActivities = Array.isArray(historyData[currentDate])
+    ? historyData[currentDate]
+    : defaultActivities.map(a => ({ ...a, value: 0 }));
+  const isPremiumSupported = isPremiumPlatformSupported();
+  const isPremiumPaywallReady = isPremiumSupported && hasRevenueCatKey();
+  const isGoogleProvider = Array.isArray(user?.providerData)
+    && user.providerData.some((provider) => provider?.providerId === 'google.com');
+
+  useEffect(() => {
+    if (!user) {
+      setIsCloudSyncEnabled(true);
+      hasShownCloudSyncWarningRef.current = false;
+      return;
+    }
+
+    setIsCloudSyncEnabled(true);
+    hasShownCloudSyncWarningRef.current = false;
+  }, [user]);
+
+  const getPackageLabel = (pkg) => {
+    const packageType = pkg?.packageType;
+    if (packageType === 'ANNUAL') return language === 'tr' ? 'Yillik PRO' : 'Annual PRO';
+    if (packageType === 'MONTHLY') return language === 'tr' ? 'Aylik PRO' : 'Monthly PRO';
+    if (packageType === 'WEEKLY') return language === 'tr' ? 'Haftalik PRO' : 'Weekly PRO';
+    if (packageType === 'LIFETIME') return language === 'tr' ? 'Omur Boyu PRO' : 'Lifetime PRO';
+    return pkg?.product?.title || t.premiumTitle;
+  };
+
+  const getPackageDescription = (pkg) => {
+    const pricePerMonth = pkg?.product?.pricePerMonthString;
+    if (pkg?.packageType === 'ANNUAL' && pricePerMonth) {
+      return language === 'tr'
+        ? `${pricePerMonth}/ay • AI Mentor • 1 Aylik Detayli Analiz • Customize Edilmis Raporlar`
+        : `${pricePerMonth}/month • AI Mentor • 1-Month Detailed Analysis • Customized Reports`;
+    }
+    if (pkg?.packageType === 'MONTHLY') {
+      return language === 'tr'
+        ? 'AI Mentor • Gunluk Goruluyor • Ozel Detayli Raporlar • Tum Ozelliklere Erisim'
+        : 'AI Mentor • Daily Insights • Detailed Reports • Full Feature Access';
+    }
+    return pkg?.product?.description || (language === 'tr' ? 'AI Mentor • Analiz • Raporlar' : 'AI Mentor • Analytics • Reports');
+  };
 
   const handleTabClick = (tab) => {
-    if (isMobile && activeTab === tab && tab !== 'dashboard') {
-      setActiveTab('dashboard');
-    } else {
-      setActiveTab(tab);
-    }
+    setActiveTab(tab);
   };
 
   const updateData = (id, field, val) => {
@@ -329,28 +506,81 @@ function App() {
 
   // Firebase Auth Listener & Data Loading
   useEffect(() => {
-    // Güvenlik Zaman Aşımı: 5 saniye içinde yanıt gelmezse yüklemeyi durdur
+    let isUnmounted = false;
     const timeout = setTimeout(() => {
-      console.warn("Firebase yanıt vermedi, zaman aşımı uygulandı.");
-      setAuthLoading(false);
-    }, 5000);
+      if (!isUnmounted) {
+        console.warn("Firebase yanıt vermedi, zaman aşımı uygulandı.");
+        setAuthLoading(false);
+      }
+    }, 10000); // 10 saniyeye çıkardık
 
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
-      console.log("Auth durumu kontrol ediliyor...");
+      if (isUnmounted) return;
+
+      console.log("Auth durumu kontrol ediliyor...", currentUser?.email);
       try {
         if (currentUser) {
           setUser(currentUser);
+          setIsCloudSyncEnabled(true);
+          hasShownCloudSyncWarningRef.current = false;
+
+          // Açılışta Premium Statusu Kontrol Et (Garantili)
+          try {
+            // Motor hazır mı kontrol et
+            const configStatus = await Purchases.isConfigured();
+            if (!configStatus.isConfigured) {
+              await Purchases.configure({ apiKey: 'appl_LSMObGgWoJiskSarRbWUkBbNJOw' });
+            }
+
+            // Artık motor hazır, customer bilgisini çek
+            const customerInfo = await Purchases.getCustomerInfo();
+
+            // LOGDAKİ YAPIYA GÖRE KESİN KONTROL:
+            const isPro = customerInfo.entitlements.active['Premium']?.isActive === true ||
+                          customerInfo.entitlements.active['pro_features']?.isActive === true;
+
+            if (isPro) {
+              console.log('✅ PRO ONAYLANDI: Kilitler açılıyor...', customerInfo.entitlements.active);
+              setIsPremiumUser(true);
+            } else {
+              console.log('❌ PRO BULUNAMADI: Kullanıcı ücretsiz modda.', customerInfo.entitlements.active);
+              setIsPremiumUser(false);
+            }
+          } catch (premiumError) {
+            console.error('⚠️ Premium kontrol hatası:', premiumError?.message || premiumError);
+            setIsPremiumUser(false);
+          }
+
           const userDocRef = doc(db, 'users', currentUser.uid);
-          const docSnap = await getDoc(userDocRef);
-          if (docSnap.exists()) {
-            const data = docSnap.data();
-            setHistoryData(data.historyData || { [formatDate(new Date())]: defaultActivities });
-            setMoods(data.moods || {});
-            setTodos(data.todos || []);
-            setDailyGoals(data.dailyGoals || {});
-            setScratchpadContent(data.scratchpadContent || '');
-          } else {
-            // New user, initialize with default data for today
+          try {
+            const docSnap = await getDoc(userDocRef);
+            if (docSnap.exists()) {
+              const data = docSnap.data();
+              setHistoryData(data.historyData || { [formatDate(new Date())]: defaultActivities });
+              setMoods(data.moods || {});
+              setTodos(data.todos || []);
+              setDailyGoals(data.dailyGoals || {});
+              setScratchpadContent(data.scratchpadContent || '');
+              // RevenueCat'ten gelen Premium değerini koru
+            } else {
+              console.log("Firestore'da kaydı bulunamadı, default veriler yükleniyor...");
+              setHistoryData({ [formatDate(new Date())]: defaultActivities });
+              setMoods({});
+              setTodos([]);
+              setDailyGoals({});
+              setScratchpadContent('');
+            }
+          } catch (firestoreError) {
+            if (firestoreError?.code === 'permission-denied') {
+              setIsCloudSyncEnabled(false);
+              if (!hasShownCloudSyncWarningRef.current) {
+                console.debug('Firestore write izni yok. Uygulama local modda devam edecek.', firestoreError);
+                hasShownCloudSyncWarningRef.current = true;
+              }
+            } else {
+              console.warn('Firestore bağlantı hatası, offline mod:', firestoreError);
+            }
+            // Offline mode - local defaults
             setHistoryData({ [formatDate(new Date())]: defaultActivities });
             setMoods({});
             setTodos([]);
@@ -358,38 +588,110 @@ function App() {
             setScratchpadContent('');
           }
         } else {
+          console.log("Kullanıcı giriş yapmamış");
           setUser(null);
           setHistoryData({});
           setMoods({});
           setTodos([]);
           setDailyGoals({});
           setScratchpadContent('');
+          setIsPremiumUser(false);
         }
       } catch (error) {
-        console.error("Firebase veri yükleme hatası:", error);
+        console.error("Auth listener hatası:", error);
+        setUser(null);
+        setHistoryData({});
       } finally {
         clearTimeout(timeout);
-        setAuthLoading(false);
+        if (!isUnmounted) {
+          setAuthLoading(false);
+        }
       }
     });
 
     return () => {
+      isUnmounted = true;
       unsubscribe();
       clearTimeout(timeout);
     };
   }, []);
 
+  // Capacitor Splash Screen Hide
+  useEffect(() => {
+    const hideEarly = async () => {
+      try {
+        if (window.Capacitor?.isNativePlatform?.()) {
+          const { SplashScreen } = await import('@capacitor/splash-screen');
+          await SplashScreen.hide();
+        }
+      } catch (_) {
+        // no-op
+      }
+    };
+
+    hideEarly();
+  }, []);
+
+  useEffect(() => {
+    if (!authLoading) {
+      window.Capacitor?.Plugins?.SplashScreen?.hide?.().catch(() => {});
+    }
+  }, [authLoading]);
+
+  // Deep Link Handler - Widget Taps
+  useEffect(() => {
+    const isNativePlatform = window.Capacitor?.isNativePlatform?.();
+    const appPlugin = window.Capacitor?.Plugins?.App;
+    if (!isNativePlatform || !appPlugin?.addListener) return undefined;
+
+    let listenerHandle;
+
+    appPlugin.addListener('appUrlOpen', (data) => {
+      const slug = data.url.split('.app').pop();
+      console.log('Deep Link Detected:', slug);
+
+      if (slug?.includes('widgetlaunch')) {
+        setActiveTab('dashboard');
+        window.scrollTo(0, 0);
+      }
+    })
+      .then((handle) => {
+        listenerHandle = handle;
+      })
+      .catch(err => console.log('Deep link listener error:', err));
+
+    return () => {
+      try {
+        listenerHandle?.remove?.();
+      } catch (error) {
+        console.log('Deep link cleanup skipped:', error);
+      }
+    };
+  }, []);
+
   // Data Saving to Firestore
   useEffect(() => {
-    if (!user) return;
+    if (!user || !isCloudSyncEnabled) return;
 
     const debounceSave = setTimeout(async () => {
-      const userDocRef = doc(db, 'users', user.uid);
-      await setDoc(userDocRef, { historyData, moods, todos, dailyGoals, scratchpadContent }, { merge: true });
-    }, 1500); // Debounce to avoid too many writes
+      try {
+        const userDocRef = doc(db, 'users', user.uid);
+        await setDoc(userDocRef, { historyData, moods, todos, dailyGoals, scratchpadContent, isPremiumUser }, { merge: true });
+      } catch (error) {
+        if (error?.code === 'permission-denied') {
+          setIsCloudSyncEnabled(false);
+          if (!hasShownCloudSyncWarningRef.current) {
+            console.debug('Firestore write izni yok. Otomatik kaydetme local moda alındı.', error);
+            hasShownCloudSyncWarningRef.current = true;
+          }
+          return;
+        }
+        console.error('Otomatik kaydetme hatası:', error);
+      }
+    }, 1500);
 
     return () => clearTimeout(debounceSave);
-  }, [historyData, moods, todos, dailyGoals, scratchpadContent, user]);
+  }, [user, isCloudSyncEnabled]);
 
   // Theme persistence
   useEffect(() => {
@@ -412,6 +714,34 @@ function App() {
   useEffect(() => {
     localStorage.setItem('appAlarmSetting', alarmSetting);
   }, [alarmSetting]);
+
+  // Arka Plan Sesi Ayarını Kaydetme
+  useEffect(() => {
+    localStorage.setItem('appAmbientSound', ambientSound);
+  }, [ambientSound]);
+
+  // Arka Plan Sesi Oynatma Mantığı
+  useEffect(() => {
+    if (!ambientAudioRef.current) {
+      ambientAudioRef.current = new Audio();
+      ambientAudioRef.current.loop = true;
+      ambientAudioRef.current.volume = 0.3;
+    }
+
+    const audio = ambientAudioRef.current;
+
+    if (isActive && ambientSound !== 'none' && timeLeft > 0) {
+      if (audio.src !== ambientSounds[ambientSound]) {
+        audio.pause();
+        audio.currentTime = 0;
+        audio.src = ambientSounds[ambientSound];
+      }
+      audio.play().catch(e => console.log("Otomatik oynatma engellendi:", e));
+    } else {
+      audio.pause();
+      audio.currentTime = 0;
+    }
+  }, [isActive, ambientSound, timeLeft]);
 
   // Mobil cihaz algılama
   useEffect(() => {
@@ -447,7 +777,7 @@ function App() {
     }
   };
 
-  // Hide bottom nav on scroll
+  // Alt menünün (bottom nav) görünürlüğü
   useEffect(() => {
     if (!isMobile) {
       setIsBottomNavVisible(true);
@@ -455,19 +785,33 @@ function App() {
     }
 
     const controlNavbar = () => {
-      if (window.scrollY > lastScrollY.current && window.scrollY > 100) {
-        if (isBottomNavVisible) setIsBottomNavVisible(false);
-      } else {
-        if (!isBottomNavVisible) setIsBottomNavVisible(true);
+      const currentScrollY = window.scrollY;
+
+      if (currentScrollY < 10) {
+        setIsBottomNavVisible(true);
+      } else if (currentScrollY > lastScrollY.current) {
+        setIsBottomNavVisible(false);
+      } else if (currentScrollY < lastScrollY.current) {
+        setIsBottomNavVisible(true);
       }
-      lastScrollY.current = window.scrollY;
+
+      lastScrollY.current = currentScrollY;
     };
 
     window.addEventListener('scroll', controlNavbar);
     return () => {
       window.removeEventListener('scroll', controlNavbar);
     };
-  }, [isMobile, isBottomNavVisible]);
+  }, [isMobile]);
+
+  // Bileşen silindiğinde/kullanıcı çıkış yaptığında sesi temizle
+  useEffect(() => {
+    return () => {
+      if (ambientAudioRef.current) {
+        ambientAudioRef.current.pause();
+      }
+    };
+  }, []);
 
   // Idle detection for screen saver
   useEffect(() => {
@@ -475,13 +819,13 @@ function App() {
       if (isIdle) setIsIdle(false);
       clearTimeout(idleTimer.current);
       idleTimer.current = setTimeout(() => {
-        if (!isActive) setIsIdle(true); // Don't go idle if pomodoro is active
-      }, 180000); // 3 minutes
+        if (!isActive) setIsIdle(true);
+      }, 180000);
     };
 
     const events = ['mousemove', 'keydown', 'click', 'scroll', 'touchstart'];
     events.forEach(event => window.addEventListener(event, handleActivity));
-    handleActivity(); // Initial call
+    handleActivity();
 
     return () => {
       events.forEach(event => window.removeEventListener(event, handleActivity));
@@ -494,71 +838,33 @@ function App() {
     if (!aiAnalysisResult) {
       return;
     }
-
-    const { totalCode, totalStudy, totalSport, sportRatio, totalProductiveActivity } = aiAnalysisResult;
-    const userName = user?.displayName || (language === 'tr' ? 'Ömer' : 'User');
+    
+    const { totalCode, totalStudy, totalSport, trend, trendPercent } = aiAnalysisResult;
+    const userName = user?.displayName || localStorage.getItem('temp_username') || (language === 'tr' ? 'Kullanıcı' : 'User');
     let advice = '';
 
     if (language === 'tr') {
-      advice = `Merhaba ${userName}! Bu haftaki verilerini senin için analiz ettim. `;
-      if (totalProductiveActivity === 0 && totalSport === 0) {
-        advice += `Bu hafta pek aktif olmamışsın gibi görünüyor. Unutma, her büyük yolculuk küçük bir adımla başlar. Bugün hedeflerinden birine sadece 10 dakika ayırmaya ne dersin? Başlangıç yapmak en zorudur, sonrası gelecektir! 💪`;
-      } else {
-        if (totalCode > 0 && totalStudy > 0) {
-          if (totalCode > (totalStudy * 50) * 1.5) { 
-            advice += `Kodlama tutkun harika (${totalCode} satır)! Pratik becerilerini geliştirdiğini gösteriyor. Ancak akademik sorumluluklarını (Ders: ${totalStudy} saat) biraz gölgede bırakmış olabilirsin. İyi bir mühendis, teorik temelleri de sağlam tutmalıdır. `;
-          } else if (totalStudy * 50 > totalCode * 1.5) { 
-            advice += `Akademik çalışmalarına verdiğin önem (${totalStudy} saat) takdire şayan. Teorik bilgin seni ileri taşıyacaktır. Pratik kodlama (${totalCode} satır) tarafını da ihmal etmediğinden emin ol, ikisi bir bütün. `;
-          } else {
-            advice += `Ders ve pratik çalışmaların arasında güzel bir denge kurmuşsun. Bu harika bir strateji! `;
-          }
-        } else if (totalCode > 0) {
-          advice += `Bu hafta kodlamaya odaklanmışsın (${totalCode} satır). Pratik yapmak çok değerli! Akademik derslerini de programına ekleyerek teorik altyapını güçlendirebilirsin. `;
-        } else if (totalStudy > 0) {
-          advice += `Bu hafta derslerine odaklanmışsın (${totalStudy} saat). Teorik bilgini sağlamlaştırmak harika! Şimdi bu bilgiyi kodlama pratiğiyle pekiştirme zamanı. `;
-        }
-
-        if (totalSport === 0) {
-          advice += `Bu hafta hiç spor yapmamışsın. Uzun saatler bilgisayar başında kalan biri olarak, zihinsel berraklığın ve sağlığın için sporu hayatına dahil etmen kritik önem taşıyor. `;
-        } else if (sportRatio < 0.5) {
-          advice += `Ancak dikkatimi çeken bir nokta var: Fiziksel aktivite hedeflerinin oldukça altındasın (%${Math.round(sportRatio * 100)}). Unutma, zihin ve beden bir bütündür. Kısa bir yürüyüş bile zihinsel berraklığını artırabilir. `;
-        } else if (sportRatio > 1.2) {
-          advice += `Fiziksel sağlığına verdiğin önem etkileyici! Bu enerji, masanın başına oturduğunda sana büyük avantaj sağlayacaktır. `;
-        } else {
-          advice += `Fiziksel aktivite hedeflerini de dengeli bir şekilde sürdürüyorsun. Harika! `;
-        }
-        advice += `Genel olarak doğru yoldasın. Bu verileri kullanarak bir sonraki haftanı daha da verimli planlayabilirsin. Başarılar! 🚀`;
-      }
+      advice = `Merhaba ${userName}! 👋\n\n`;
+      if (trend === 'improving') advice += `Verimliliğin artışta (%${trendPercent}). Böyle devam et! 🚀\n`;
+      else if (trend === 'declining') advice += `Verimliliğinde biraz düşüş var. Dinlenmeye veya odaklanmaya ihtiyacın olabilir. 🧘\n`;
+      else advice += `Bu hafta dengeli bir performans sergiliyorsun. ✨\n`;
+      
+      advice += `\nÖne Çıkanlar:\n`;
+      advice += `• Kodlama: ${totalCode} satır\n`;
+      advice += `• Ders: ${totalStudy} saat\n`;
+      if (totalSport > 0) advice += `• Spor: ${totalSport} dakika\n`;
+      advice += `\nHedefin: Bugün en önemli görevine 25 dakika ayır!`;
     } else {
-      // English
-      advice = `Hello ${userName}! I've analyzed your data for this week. `;
-      if (totalProductiveActivity === 0 && totalSport === 0) {
-        advice += `It seems you haven't been very active this week. Remember, every great journey begins with a small step. How about dedicating just 10 minutes to one of your goals today? Starting is the hardest part, the rest will follow! 💪`;
-      } else {
-        if (totalCode > 0 && totalStudy > 0) {
-          if (totalCode > (totalStudy * 50) * 1.5) { 
-            advice += `Your passion for coding is great (${totalCode} lines)! It shows you're developing your practical skills. However, you might be overshadowing your academic responsibilities (Study: ${totalStudy} hours) a bit. A good engineer must also keep their theoretical foundations strong. `;
-          } else if (totalStudy * 50 > totalCode * 1.5) { 
-            advice += `Your dedication to academic studies (${totalStudy} hours) is admirable. Theoretical knowledge will carry you forward. Make sure not to neglect the practical coding side (${totalCode} lines), they go hand in hand. `;
-          } else {
-            advice += `You have established a nice balance between study and practical work. This is a great strategy! `;
-          }
-        } else if (totalCode > 0) {
-          advice += `You focused on coding this week (${totalCode} lines). Practice is invaluable! You can strengthen your theoretical background by adding academic studies to your schedule. `;
-        } else if (totalStudy > 0) {
-          advice += `You focused on your studies this week (${totalStudy} hours). Solidifying your theoretical knowledge is great! Now it's time to reinforce this knowledge with coding practice. `;
-        }
-        if (totalSport === 0) {
-          advice += `You haven't done any sports this week. As someone who spends long hours in front of a computer, incorporating sports into your life is critical for your mental clarity and health. `;
-        } else if (sportRatio < 0.5) {
-          advice += `However, one point caught my attention: You are well below your physical activity goals (%${Math.round(sportRatio * 100)}). Remember, mind and body are one. Even a short walk can increase your mental clarity. `;
-        } else if (sportRatio > 1.2) {
-          advice += `The importance you place on your physical health is impressive! This energy will give you a great advantage when you sit at your desk. `;
-        } else {
-          advice += `You are also maintaining your physical activity goals in a balanced way. Great! `;
-        }
-        advice += `Overall, you are on the right track. You can use this data to plan your next week even more efficiently. Good luck! 🚀`;
-      }
+      advice = `Hello ${userName}! 👋\n\n`;
+      if (trend === 'improving') advice += `Your productivity is up by ${trendPercent}%. Keep it going! 🚀\n`;
+      else if (trend === 'declining') advice += `Productivity dipped slightly. Take a break or refocus. 🧘\n`;
+      else advice += `Steady performance this week. ✨\n`;
+      
+      advice += `\nHighlights:\n`;
+      advice += `• Code: ${totalCode} lines\n`;
+      advice += `• Study: ${totalStudy} hours\n`;
+      if (totalSport > 0) advice += `• Sport: ${totalSport} mins\n`;
+      advice += `\nYour Goal: Dedicate 25 mins to your most important task today!`;
     }
     setAiAdvice(advice);
     setIsAiLoading(false);
@@ -579,7 +885,7 @@ function App() {
                   audio.play().catch(() => {});
               }
             }
-            
+
             if (notifications && "Notification" in window) {
               if (Notification.permission === "granted") {
                 new Notification("LifeTrack OS", { body: t.completed });
@@ -622,7 +928,6 @@ function App() {
     const handleBeforeUnload = (e) => {
       if (isActive) {
         e.preventDefault();
-        // Modern tarayıcılar bu mesajı göstermez, standart bir uyarı gösterir.
         e.returnValue = 'Çalışan bir Pomodoro sayacınız var. Sayfadan ayrılmak istediğinize emin misiniz?';
       }
     };
@@ -641,10 +946,9 @@ function App() {
     return () => window.removeEventListener('keydown', handleEsc);
   }, []);
 
-  // Günün Hedefi İşlemleri (Object yapısına geçiş ve Confetti)
+  // Günün Hedefi İşlemleri
   const getDailyGoal = (date) => {
     const goal = dailyGoals[date];
-    // Eski string verileri desteklemek için kontrol
     if (typeof goal === 'string') return { text: goal, completed: false };
     return goal || { text: '', completed: false };
   };
@@ -665,7 +969,7 @@ function App() {
       ...dailyGoals,
       [currentDate]: { ...currentGoal, completed: newCompleted }
     });
-    
+
     if (newCompleted) {
       import('canvas-confetti').then(module => {
         const confetti = module.default;
@@ -680,12 +984,12 @@ function App() {
 
   const handleUpdatePassword = async (e) => {
     e.preventDefault();
-    if (user && newPassword && currentPassword) {
+    if (auth.currentUser && newPassword && currentPassword) {
       try {
-        const credential = EmailAuthProvider.credential(user.email, currentPassword);
-        await reauthenticateWithCredential(user, credential);
-        
-        await updatePassword(user, newPassword);
+        const credential = EmailAuthProvider.credential(auth.currentUser.email, currentPassword);
+        await reauthenticateWithCredential(auth.currentUser, credential);
+
+        await updatePassword(auth.currentUser, newPassword);
         alert(t.passwordUpdated);
         setIsPasswordModalOpen(false);
         setNewPassword('');
@@ -697,68 +1001,14 @@ function App() {
     }
   };
 
-  const handleDownloadReport = async () => {
-    if (!reportCardRef.current || !chartCardRef.current) return;
-
-    // Kartın ekran görüntüsü için arka plan rengini belirle
-    const captureBg = theme === 'dark' ? '#1e293b' : '#ffffff';
-
-    try {
-      const chartCanvas = await html2canvas(chartCardRef.current, {
-        backgroundColor: captureBg,
-        scale: 2,
-      });
-      
-      const reportCanvas = await html2canvas(reportCardRef.current, {
-        backgroundColor: captureBg,
-        scale: 2,
-        ignoreElements: (element) => element.tagName === 'BUTTON', // Butonu PDF'e dahil etme
-      });
-
-      const pdf = new jsPDF('p', 'px', 'a4');
-      const pdfWidth = pdf.internal.pageSize.getWidth();
-      
-      const chartImgData = chartCanvas.toDataURL('image/png');
-      const reportImgData = reportCanvas.toDataURL('image/png');
-
-      const chartHeight = (chartCanvas.height * pdfWidth) / chartCanvas.width;
-      const reportHeight = (reportCanvas.height * pdfWidth) / reportCanvas.width;
-
-      // Grafik (Üstte)
-      pdf.addImage(chartImgData, 'PNG', 0, 20, pdfWidth, chartHeight);
-
-      // Rapor Yazıları (Grafiğin Altında)
-      pdf.addImage(reportImgData, 'PNG', 0, 20 + chartHeight + 20, pdfWidth, reportHeight);
-
-      pdf.save(`LifeTrack-Rapor-${formatDate(new Date())}.pdf`);
-    } catch (error) {
-      console.error("PDF oluşturulurken hata:", error);
-    }
-  };
-
-  const handleClearData = async () => {
-    if (window.confirm(t.confirmClear)) {
-      // Varsayılan verilere dön
-      setHistoryData({ [formatDate(new Date())]: defaultActivities });
-      setMoods({});
-      setTodos([]);
-      setDailyGoals({});
-      setScratchpadContent('');
-      // Firebase'e kaydetme işlemi useEffect ile tetiklenecek
-    }
-  };
-
   const handleDeleteAccount = async () => {
     if (window.confirm(t.confirmDeleteAccount)) {
-        if (!user) return;
+        if (!auth.currentUser) return;
         try {
-            // First, delete user data from Firestore
             const userDocRef = doc(db, 'users', user.uid);
             await deleteDoc(userDocRef);
 
-            // Then, delete the user from Auth
-            await deleteUser(user);
-            // onAuthStateChanged will handle the rest
+            await deleteUser(auth.currentUser);
         } catch (error) {
             console.error("Error deleting account: ", error);
             if (error.code === 'auth/requires-recent-login') {
@@ -780,15 +1030,12 @@ function App() {
   const addTodo = (e) => {
     e.preventDefault();
     if (!newTodo.trim()) return;
-    // Yeni görevi her zaman listenin başına ekle
     setTodos([{ id: Date.now(), text: newTodo, completed: false }, ...todos]);
     setNewTodo('');
   };
 
   const toggleTodo = (id) => {
     const newTodos = todos.map(t => t.id === id ? { ...t, completed: !t.completed } : t);
-    // Tamamlananları sona, tamamlanmayanları başa alacak şekilde sırala.
-    // Modern JS motorlarındaki stabil sıralama, sürükle-bırak ile yapılan sıralamayı korur.
     newTodos.sort((a, b) => a.completed - b.completed);
     setTodos(newTodos);
   };
@@ -831,9 +1078,16 @@ function App() {
                 daysWithData++;
             }
         });
+
+        let weekName;
+        if (i === 0) {
+            weekName = 'Bu Hafta'; // Default Turkish
+        } else {
+            weekName = `${i} H Önce`; // Default Turkish
+        }
         
         weeklyScores.push({
-            name: i === 0 ? t.thisWeek : `${i}${t.weeksAgo}`,
+            name: weekName,
             Skor: daysWithData > 0 ? Math.round(weekTotalProgress / daysWithData) : 0,
         });
         weeklyActivityTotals.push(activityTotals);
@@ -850,10 +1104,21 @@ function App() {
         } else if (thisWeek > 0) {
             change = 100;
         }
-        return { name: act.name.split(' ')[0], color: act.color, change, thisWeek, lastWeek };
+
+        const trend = [];
+        for(let j=6; j>=0; j--) {
+            const d = new Date();
+            d.setDate(d.getDate() - j);
+            const dateStr = formatDate(d);
+            const dayData = historyData[dateStr] || [];
+            const actData = dayData.find(a => a.name === act.name);
+            const val = actData ? Math.min((actData.value / (actData.goal || 1)) * 100, 100) : 0;
+            trend.push({ day: j, value: val });
+        }
+
+        return { name: act.name.split(' ')[0], color: act.color, change, thisWeek, lastWeek, trend };
     });
 
-    // En Verimli Gün Hesaplama
     const daysOfWeek = language === 'tr' ? ['Pazar', 'Pazartesi', 'Salı', 'Çarşamba', 'Perşembe', 'Cuma', 'Cumartesi'] : ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
     const dayScores = Array(7).fill(0);
     const dayCounts = Array(7).fill(0);
@@ -874,10 +1139,9 @@ function App() {
     for(let i=0; i<7; i++) { if(dayCounts[i]>0 && (dayScores[i]/dayCounts[i]) > maxAvg) { maxAvg = dayScores[i]/dayCounts[i]; bestDayIndex = i; } }
     const bestDay = bestDayIndex !== -1 ? daysOfWeek[bestDayIndex] : null;
 
-    // En Uzun Seri (Longest Streak) Hesaplama
     let maxStreak = 0;
     let currentStreakCalc = 0;
-    const sortedDatesAsc = [...allDates].reverse(); // Tarihleri eskiden yeniye sırala
+    const sortedDatesAsc = [...allDates].reverse();
     let prevDateObj = null;
 
     sortedDatesAsc.forEach(dateStr => {
@@ -899,63 +1163,409 @@ function App() {
         if (currentStreakCalc > maxStreak) maxStreak = currentStreakCalc;
     });
 
-    return { chartData: weeklyScores.reverse(), comparisonData: comparison, bestDay, maxStreak };
-  }, [historyData, language, t]);
+    const daysOfWeekShort = language === 'tr' ? ['Paz', 'Pzt', 'Sal', 'Çar', 'Per', 'Cum', 'Cmt'] : ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+    const weeklyTrend = [];
+    for(let j=6; j>=0; j--) {
+        const d = new Date();
+        d.setDate(d.getDate() - j);
+        const dateStr = formatDate(d);
+        const dayData = historyData[dateStr] || [];
+      let activeGoals = 0;
+      dayData.forEach(act => {
+        if ((act.value || 0) > 0) {
+          activeGoals += 1;
+        }
+      });
+      const totalGoals = dayData.length;
+      const score = totalGoals > 0 ? Math.round((activeGoals / totalGoals) * 100) : 0;
+        weeklyTrend.push({
+            day: daysOfWeekShort[d.getDay()],
+        score,
+        completedGoals: activeGoals,
+        totalGoals
+        });
+    }
+
+    const monthlyTrend = [];
+    for (let j = 29; j >= 0; j--) {
+      const d = new Date();
+      d.setDate(d.getDate() - j);
+      const dateStr = formatDate(d);
+      const dayData = historyData[dateStr] || [];
+      let activeGoals = 0;
+      dayData.forEach(act => {
+        if ((act.value || 0) > 0) {
+          activeGoals += 1;
+        }
+      });
+      const totalGoals = dayData.length;
+      const score = totalGoals > 0 ? Math.round((activeGoals / totalGoals) * 100) : 0;
+      monthlyTrend.push({
+        day: `${d.getDate()}`,
+        score,
+        completedGoals: activeGoals,
+        totalGoals,
+      });
+    }
+
+    let thisWeekMinutes = 0;
+    defaultActivities.forEach(act => {
+        const lowerName = (act.name || '').toLowerCase();
+        const val = thisWeekTotals[act.name] || 0;
+        if (lowerName.includes('saat') || lowerName.includes('hour')) {
+            thisWeekMinutes += val * 60;
+        } else {
+            thisWeekMinutes += val;
+        }
+    });
+    const thisWeekHours = Math.floor(thisWeekMinutes / 60);
+
+    return { chartData: weeklyScores.reverse(), comparisonData: comparison, bestDay, maxStreak, weeklyTrend, monthlyTrend, thisWeekHours };
+  }, [historyData, language]);
+
+  const syncPremiumState = async (showLoader = true) => {
+    if (!user || !isPremiumPaywallReady) {
+      setPremiumPackages([]);
+      return [];
+    }
+
+    if (showLoader) {
+      setIsPremiumLoading(true);
+    }
+
+    setPremiumError('');
+
+    const resolvePremiumErrorMessage = (error) => {
+      const rawMessage = (error?.message || '').toLowerCase();
+      if (rawMessage.includes('premium_timeout') || rawMessage.includes('timeout')) {
+        return language === 'tr'
+          ? 'PRO bağlantısı zaman aşımına uğradı. İnternetini kontrol edip tekrar dene.'
+          : 'PRO connection timed out. Check your internet and try again.';
+      }
+      if (rawMessage.includes('network')) {
+        return language === 'tr'
+          ? 'Ag baglantisi sorunu. Internetini kontrol edip tekrar dene.'
+          : 'Network issue detected. Please check your internet and try again.';
+      }
+      return error?.message || (language === 'tr'
+        ? 'PRO bilgileri yuklenirken bir hata olustu.'
+        : 'An error occurred while loading PRO details.');
+    };
+
+    try {
+      const premiumSession = await initializePremiumSession(user.uid);
+      const nextPackages = premiumSession.packages || [];
+      setPremiumPackages(nextPackages);
+      if (premiumSession.customerInfo) {
+        setIsPremiumUser(hasActivePremiumEntitlement(premiumSession.customerInfo));
+      }
+      return nextPackages;
+    } catch (error) {
+      console.error('Premium sync failed:', error);
+      setPremiumError(resolvePremiumErrorMessage(error));
+      return [];
+    } finally {
+      if (showLoader) {
+        setTimeout(() => { setIsPremiumLoading(false); }, 1500);
+      }
+    }
+  };
+
+  const openPremiumModal = () => {
+    setIsPremiumModalOpen(true);
+    setPremiumError('');
+
+    if (isPremiumPaywallReady && user) {
+      syncPremiumState(true);
+    }
+  };
+
+  const handlePremiumPurchase = async () => {
+    setPremiumError('');
+    setActivePurchaseId('$rc_monthly');
+
+    try {
+      // 1. Motor Kontrolü ve Zorla Ateşleme
+      const configStatus = await Purchases.isConfigured();
+      // Dikkat: Capacitor plugin'i objenin içinde boolean döner
+      if (!configStatus.isConfigured) {
+        await Purchases.configure({ apiKey: 'appl_LSMObGgWoJiskSarRbWUkBbNJOw' });
+      }
+
+      // 2. Artık motor %100 çalışıyor, paketleri çek
+      const offerings = await Purchases.getOfferings();
+      const packageToBuy = offerings.current?.availablePackages.find(p => p.identifier === '$rc_monthly') || offerings.current?.availablePackages[0];
+
+      if (!packageToBuy) throw new Error('Aylık paket bulunamadı ($rc_monthly)');
+
+      // 3. Satın almayı başlat
+      const { customerInfo } = await Purchases.purchasePackage({ aPackage: packageToBuy });
+
+      // Logda bulunan veri yapısına göre kontrol
+      const isPro = customerInfo.entitlements.active['Premium']?.isActive === true ||
+                    customerInfo.entitlements.active['pro_features']?.isActive === true;
+
+      if (isPro) {
+        alert('✅ SATINALMA BAŞARILI - PREMIUM AKTIF!');
+        console.log('✅ Premium Entitlement Algılandı:', customerInfo.entitlements.active);
+        setIsPremiumUser(true);
+        setIsPremiumModalOpen(false);
+        await syncPremiumState(false);
+      } else {
+        console.warn('❌ Entitlement bulunamadı:', customerInfo.entitlements);
+        alert('❌ Satın alma tamamlandı ancak Premium erişimi alınamadı');
+      }
+    } catch (error) {
+      if (!error?.userCancelled) {
+        alert('Apple Satın Alma Hatası: ' + error.message);
+        console.error('Premium purchase failed:', error);
+        setPremiumError(error?.message || (language === 'tr'
+          ? 'Satın alma tamamlanamadı.'
+          : 'Purchase could not be completed.'));
+      }
+    } finally {
+      setActivePurchaseId('');
+    }
+  };
+
+  const handlePremiumCtaClick = async () => {
+    if (activePurchaseId || isRestoringPurchases || isPremiumCtaLoading) return;
+
+    setIsPremiumCtaLoading(true);
+    setPremiumError('');
+
+    try {
+      if (!user) {
+        setPremiumError(language === 'tr' ? 'Devam etmek için giriş yapman gerekiyor.' : 'Please sign in to continue.');
+        return;
+      }
+
+      if (!isPremiumPaywallReady) {
+        setPremiumError(language === 'tr'
+          ? 'Ödeme sistemi şu an hazır değil. Lütfen daha sonra tekrar dene.'
+          : 'Payment system is not ready yet. Please try again shortly.');
+        return;
+      }
+
+      await handlePremiumPurchase();
+    } catch (error) {
+      console.error('Premium CTA flow failed:', error);
+      setPremiumError(error?.message || (language === 'tr'
+        ? 'Satın alma akışı başlatılamadı. Lütfen tekrar dene.'
+        : 'Purchase flow could not be started. Please try again.'));
+    } finally {
+      setIsPremiumCtaLoading(false);
+    }
+  };
+
+  const handleRestorePurchases = async () => {
+    setPremiumError('');
+    setIsRestoringPurchases(true);
+
+    try {
+      const { customerInfo } = await restorePremiumPurchases();
+      const restoredPremium = hasActivePremiumEntitlement(customerInfo);
+      setIsPremiumUser(restoredPremium);
+      if (!restoredPremium) {
+        setPremiumError(language === 'tr'
+          ? 'Geri yüklenecek aktif bir PRO satın alımı bulunamadı.'
+          : 'No active PRO purchase was found to restore.');
+      } else {
+        setIsPremiumModalOpen(false);
+      }
+      await syncPremiumState(false);
+    } catch (error) {
+      console.error('Restore purchases failed:', error);
+      setPremiumError(error?.message || (language === 'tr'
+        ? 'Satın alımlar geri yüklenemedi.'
+        : 'Purchases could not be restored.'));
+    } finally {
+      setIsRestoringPurchases(false);
+    }
+  };
+
+  useEffect(() => {
+    if (!user || !isPremiumPaywallReady) return undefined;
+
+    let isCancelled = false;
+    let timeoutHandle = null;
+
+    const loadPremiumState = async () => {
+      setIsPremiumLoading(true);
+      setPremiumError('');
+
+      try {
+        const premiumSession = await initializePremiumSession(user.uid);
+        if (isCancelled) return;
+        setPremiumPackages(premiumSession.packages || []);
+        if (premiumSession.customerInfo) {
+          setIsPremiumUser(hasActivePremiumEntitlement(premiumSession.customerInfo));
+        }
+      } catch (error) {
+        if (isCancelled) return;
+        console.error('Premium sync failed:', error);
+        const rawMessage = (error?.message || '').toLowerCase();
+        if (rawMessage.includes('premium_timeout') || rawMessage.includes('timeout')) {
+          setPremiumError(language === 'tr'
+            ? 'PRO bağlantısı zaman aşımına uğradı. İnternetini kontrol edip tekrar dene.'
+            : 'PRO connection timed out. Check your internet and try again.');
+        } else if (rawMessage.includes('network')) {
+          setPremiumError(language === 'tr'
+            ? 'Ağ bağlantısı sorunu. İnternetini kontrol edip tekrar dene.'
+            : 'Network issue detected. Please check your internet and try again.');
+        } else {
+          setPremiumError(error?.message || (language === 'tr'
+            ? 'PRO bilgileri yüklenirken bir hata oluştu.'
+            : 'An error occurred while loading PRO details.'));
+        }
+      } finally {
+        if (!isCancelled) {
+          setIsPremiumLoading(false);
+        }
+      }
+    };
+
+    // 8 saniye sonunda hala yükleniyorsa timeout hatası göster
+    timeoutHandle = setTimeout(() => {
+      if (!isCancelled && isPremiumLoading) {
+        setPremiumError(language === 'tr'
+          ? 'Paketler yüklenemedi. Lütfen daha sonra tekrar deneyin.'
+          : 'Could not load packages. Please try again later.');
+        setIsPremiumLoading(false);
+      }
+    }, 8000);
+
+    loadPremiumState();
+
+    return () => {
+      isCancelled = true;
+      if (timeoutHandle) clearTimeout(timeoutHandle);
+    };
+  }, [user, isPremiumPaywallReady, language]);
+
+  // Widget Data Senkronizasyonu (iOS Home Screen Widgets)
+  useEffect(() => {
+    const syncWidgetData = async () => {
+      try {
+        await updateAllWidgets({
+          historyData,
+          currentDate,
+          analysisData,
+          timeLeft,
+          pomodoroDuration,
+          isActive,
+          moods,
+          todos,
+          accentColor
+        });
+      } catch (error) {
+        console.log('Widget update skipped:', error.message);
+      }
+    };
+    syncWidgetData();
+  }, [isActive, currentDate, accentColor]);
 
   const generateAiAdvice = async () => {
     setIsAiLoading(true);
     setAiAdvice('');
     setAiAnalysisResult(null);
 
-    // 1. Veri Toplama (Son 7 Gün)
     const today = new Date();
     const last7Days = [];
+    const last14Days = [];
+    
     for (let i = 0; i < 7; i++) {
       const d = new Date();
       d.setDate(today.getDate() - i);
       last7Days.push(formatDate(d));
     }
+    
+    for (let i = 0; i < 14; i++) {
+      const d = new Date();
+      d.setDate(today.getDate() - i);
+      last14Days.push(formatDate(d));
+    }
 
-    let totalCode = 0;
-    let totalStudy = 0;
-    let totalSport = 0;
-    let sportGoalTotal = 0;
+    // Hafta içi ve hafta sonu ayrımı
+    const weekdayActivity = { code: 0, study: 0, sport: 0, count: 0 };
+    const weekendActivity = { code: 0, study: 0, sport: 0, count: 0 };
+
+    let totalCode = 0, totalStudy = 0, totalSport = 0, sportGoalTotal = 0;
+    let dailyScores = [];
 
     last7Days.forEach(dateStr => {
       const dayData = historyData[dateStr] || [];
+      const dayDate = new Date(dateStr);
+      const dayOfWeek = dayDate.getDay();
+      const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
+
+      let dayScore = 0;
       dayData.forEach(act => {
-        if (act.name.toLowerCase().includes('kod')) totalCode += act.value;
-        if (act.name.toLowerCase().includes('ders')) totalStudy += act.value;
-        if (act.name.toLowerCase().includes('spor')) {
-            totalSport += act.value;
-            sportGoalTotal += (act.goal || 1);
+        const lower = (act.name || '').toLowerCase();
+        if (lower.includes('kod')) {
+          totalCode += act.value;
+          if (isWeekend) weekendActivity.code += act.value;
+          else weekdayActivity.code += act.value;
         }
+        if (lower.includes('ders')) {
+          totalStudy += act.value;
+          if (isWeekend) weekendActivity.study += act.value;
+          else weekdayActivity.study += act.value;
+        }
+        if (lower.includes('spor')) {
+          totalSport += act.value;
+          sportGoalTotal += (act.goal || 1);
+          if (isWeekend) weekendActivity.sport += act.value;
+          else weekdayActivity.sport += act.value;
+        }
+        dayScore += Math.min((act.value / (act.goal || 1)) * 100, 100);
       });
+
+      if (dayData.length > 0) {
+        dailyScores.push(dayScore / dayData.length);
+        if (isWeekend) {
+          weekendActivity.count++;
+        } else {
+          weekdayActivity.count++;
+        }
+      } else {
+        dailyScores.push(0);
+      }
     });
 
-    // Simüle edilmiş API gecikmesi
-    await new Promise(resolve => setTimeout(resolve, 2500));
+    // Trend analizi (ilk 3 gün vs son 3 gün)
+    const firstHalfScore = dailyScores.slice(4, 7).reduce((a, b) => a + b, 0) / 3;
+    const secondHalfScore = dailyScores.slice(0, 4).reduce((a, b) => a + b, 0) / 4;
+    const trend = secondHalfScore > firstHalfScore ? 'improving' : secondHalfScore < firstHalfScore ? 'declining' : 'stable';
+    const trendPercent = Math.round(((secondHalfScore - firstHalfScore) / (firstHalfScore || 1)) * 100);
 
-    // 2. Prompt Engineering & Otomasyon Mantığı
-    // Gerçek bir API'ye gönderilecek prompt şuna benzerdi:
-    // `Benim adım Ömer. Bu haftaki verilerim şunlar: Kod: ${totalCode}, Ders: ${totalStudy}, Spor: ${totalSport}. Bir bilgisayar mühendisliği öğrencisi olarak bana üretkenlik, sağlık ve ders dengesi konusunda samimi ve profesyonel bir tavsiye ver.`
+    // Bazı günler 0 puan alıyor mu?
+    const inactiveDays = dailyScores.filter(s => s === 0).length;
 
     const sportRatio = sportGoalTotal > 0 ? (totalSport / sportGoalTotal) : 0;
     const totalProductiveActivity = totalCode + totalStudy;
-    
+
+    await new Promise(resolve => setTimeout(resolve, 2500));
+
     setAiAnalysisResult({
       totalCode,
       totalStudy,
       totalSport,
       sportRatio,
       totalProductiveActivity,
+      weekdayActivity,
+      weekendActivity,
+      trend,
+      trendPercent,
+      inactiveDays,
+      dailyScores,
     });
   };
 
   // Sistem İstatistikleri Hesaplama
   const systemStats = useMemo(() => {
     if (!user) return { memberSince: '-', totalHours: 0 };
-    
+
     const joinDate = new Date(user.metadata.creationTime);
     const memberSince = joinDate.toLocaleDateString(language === 'tr' ? 'tr-TR' : 'en-US', { month: 'long', year: 'numeric' });
 
@@ -963,7 +1573,7 @@ function App() {
     Object.values(historyData).forEach(dayData => {
       if (Array.isArray(dayData)) {
         dayData.forEach(act => {
-           const lowerName = act.name.toLowerCase();
+           const lowerName = (act.name || '').toLowerCase();
            if (lowerName.includes('saat') || lowerName.includes('hour')) {
              totalMinutes += (parseFloat(act.value) || 0) * 60;
            } else if (lowerName.includes('dakika') || lowerName.includes('minute') || lowerName.includes('min')) {
@@ -972,10 +1582,10 @@ function App() {
         });
       }
     });
-    
+
     const totalHours = Math.floor(totalMinutes / 60);
     const completedTasks = todos.filter(t => t.completed).length;
-    
+
     return { memberSince, totalHours, completedTasks };
   }, [user, historyData, language, todos]);
 
@@ -985,7 +1595,7 @@ function App() {
         scrollTimeout.current = setTimeout(() => {
             const cardWidth = gridRef.current.querySelector('.card')?.offsetWidth;
             if (cardWidth) {
-                const gap = 15; // from css
+                const gap = 15;
                 const scrollLeft = gridRef.current.scrollLeft;
                 const index = Math.round(scrollLeft / (cardWidth + gap));
                 setActiveCardIndex(index);
@@ -994,22 +1604,75 @@ function App() {
     }
   };
 
-  const deleteActivity = (id) => {
-    const updated = currentActivities.filter(a => a.id !== id);
-    setHistoryData({ ...historyData, [currentDate]: updated });
+  const streak = useMemo(() => {
+    if (!historyData) return 0;
+    let streak = 0;
+    const today = new Date();
+    for (let i = 0; ; i++) {
+      const d = new Date(today);
+      d.setDate(d.getDate() - i);
+      const dateStr = formatDate(d);
+      if (!historyData[dateStr]) break;
+      const dayData = historyData[dateStr];
+      if (!dayData || dayData.length === 0) break;
+      let dayTotal = 0;
+      dayData.forEach(act => { dayTotal += Math.min((act.value / (act.goal || 1)) * 100, 100); });
+      if ((dayTotal / dayData.length) >= 50) {
+        streak++;
+      } else {
+        break;
+      }
+    }
+    return streak;
+  }, [historyData]);
+
+  const generateChartData = () => {
+    const today = new Date();
+    const last7Days = [];
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date(today);
+      d.setDate(today.getDate() - i);
+      last7Days.push({ date: formatDate(d), day: d.toLocaleDateString('tr-TR', { weekday: 'short' }) });
+    }
+
+    return last7Days.map(dayObj => {
+      const dayData = historyData[dayObj.date] || [];
+      let completedGoals = 0;
+      if (dayData.length > 0) {
+        dayData.forEach(act => {
+          if ((act.value || 0) > 0) {
+            completedGoals += 1;
+          }
+        });
+      }
+      return { name: dayObj.day, Skor: completedGoals };
+    });
   };
 
   const addActivity = (e) => {
     e.preventDefault();
-    if (!newName || !newGoal) return;
-    const newAct = {
-      id: Date.now(), name: newName, iconName: newIcon, value: 0, goal: parseFloat(newGoal), 
-      weeklyGoal: parseFloat(newWeeklyGoal) || (parseFloat(newGoal) * 7),
-      color: '#' + Math.floor(Math.random()*16777215).toString(16)
-    };
-    setHistoryData({ ...historyData, [currentDate]: [...currentActivities, newAct] });
-    setNewName(''); setNewGoal(''); setNewWeeklyGoal('');
-    setNewIcon('Activity');
+    if (!newName.trim() || !newGoal) return;
+    const newId = Math.max(...currentActivities.map(a => a.id), 0) + 1;
+    const updated = [...currentActivities, {
+      id: newId,
+      name: newName,
+      value: 0,
+      goal: parseFloat(newGoal) || 0,
+      weeklyGoal: parseFloat(newWeeklyGoal) || 0,
+      iconName: newIcon,
+      color: accentColor
+    }];
+    setHistoryData({ ...historyData, [currentDate]: updated });
+    setNewName('');
+    setNewGoal('');
+    setNewWeeklyGoal('');
+    setNewIcon('Book');
+  };
+
+  const deleteActivity = (id) => {
+    const updated = currentActivities.filter(a => a.id !== id);
+    setHistoryData({ ...historyData, [currentDate]: updated });
+    setEditingActivity(null);
   };
 
   const handleSaveActivity = (e) => {
@@ -1020,258 +1683,391 @@ function App() {
     setEditingActivity(null);
   };
 
-  const handleUpdateProfile = async (e) => {
-    e.preventDefault();
-    if (user) {
-      try {
-        const profileUpdates = { displayName: newDisplayName };
-        if (selectedAvatar) profileUpdates.photoURL = selectedAvatar;
-        
-        await updateProfile(user, profileUpdates);
-        
-        // Force user state update to reflect changes immediately across the app
-        setUser(prevUser => ({
-          ...prevUser,
-          ...profileUpdates,
-        }));
-        setIsProfileModalOpen(false);
-        setSelectedAvatar(''); // Seçimi temizle
-        setShowWave(true);
-        setTimeout(() => setShowWave(false), 3000);
-      } catch (error) {
-        console.error("Error updating profile: ", error);
-      }
-    }
-  };
-
-  // Streak (Seri) Hesaplama
-  const calculateStreak = () => {
-    let currentStreak = 0;
-    const today = new Date();
-
-    const checkDayAverage = (dateObj) => {
-      const dayData = historyData[formatDate(dateObj)];
-      if (!dayData || dayData.length === 0) return 0;
-      let totalProgress = 0;
-      dayData.forEach(act => { totalProgress += Math.min((act.value / (act.goal || 1)) * 100, 100); });
-      return totalProgress / dayData.length;
-    };
-
-    let checkDate = new Date(today);
-    checkDate.setDate(checkDate.getDate() - 1);
-
-    while (true) {
-      if (checkDayAverage(checkDate) >= 50) {
-        currentStreak++;
-        checkDate.setDate(checkDate.getDate() - 1);
-      } else { break; }
-    }
-    if (checkDayAverage(today) >= 50) currentStreak++;
-    return currentStreak;
-  };
-
-  const streak = calculateStreak();
-
-  const generateChartData = () => {
-    return [6,5,4,3,2,1,0].map(i => {
-      const d = new Date(); d.setDate(d.getDate() - i);
-      const dStr = formatDate(d);
-      const dayData = historyData[dStr] || [];
-      let total = 0;
-      dayData.forEach(act => total += Math.min((act.value / (act.goal || 1)) * 100, 100));
-      return { 
-        name: d.toLocaleDateString('tr-TR', { weekday: 'short' }), 
-        Skor: dayData.length ? Math.round(total / dayData.length) : 0 
-      };
-    });
-  };
-
   const exportData = () => {
-    const dataStr = JSON.stringify({ historyData, moods }, null, 2);
-    const blob = new Blob([dataStr], { type: "application/json" });
-    const url = URL.createObjectURL(blob);
+    const dataToExport = {
+      historyData,
+      moods,
+      todos,
+      dailyGoals,
+      scratchpadContent,
+      isPremiumUser,
+      exportedAt: new Date().toISOString()
+    };
+    const dataStr = JSON.stringify(dataToExport, null, 2);
+    const dataBlob = new Blob([dataStr], { type: 'application/json' });
+    const url = URL.createObjectURL(dataBlob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = `lifetrack-backup-${formatDate(new Date())}.json`;
-    document.body.appendChild(link);
+    link.download = `LifeTrack-Data-${formatDate(new Date())}.json`;
     link.click();
-    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
   };
 
-  const handleSignOut = async () => {
+  const handleUpdateProfile = async (e) => {
+    e.preventDefault();
+    if (!user) return;
     try {
-      await signOut(auth);
+      const photoURL = selectedAvatar || user.photoURL || '';
+      await updateProfile(user, {
+        displayName: newDisplayName || displayUsername,
+        photoURL: photoURL,
+      });
+      setUser(prev => ({ ...prev, displayName: newDisplayName || displayUsername, photoURL }));
+      setIsProfileModalOpen(false);
+      setSelectedAvatar('');
     } catch (error) {
-      console.error("Error signing out: ", error);
+      console.error("Profile update error:", error);
+      alert(error.message);
     }
   };
+
+  const renderPremiumSpotlight = (title, message) => (
+    <motion.div
+      className="pro-feature-card premium-glow-frame"
+      initial={{ opacity: 0, y: 14 }}
+      animate={{ opacity: 1, y: 0 }}
+      style={{ marginBottom: '20px' }}
+    >
+      <div className="pro-feature-chip">{t.premiumTitle}</div>
+      <div className="pro-feature-orb">
+        <Crown size={38} color="#fbbf24" />
+      </div>
+      <h3 className="header-title header-title-premium" style={{ margin: 0 }}>
+        {title}
+      </h3>
+      <p style={{ margin: 0, maxWidth: '460px', color: 'var(--text-dim)', lineHeight: 1.7 }}>
+        {message}
+      </p>
+      <button className="pro-feature-button premium-glow" onClick={handlePremiumCtaClick} disabled={activePurchaseId || isPremiumCtaLoading}>
+        {isPremiumCtaLoading ? '⏳...' : t.proUpgrade}
+      </button>
+    </motion.div>
+  );
+
+  const pieData = analysisData?.comparisonData?.map((item) => ({
+    name: item.name,
+    value: Math.max(1, Math.abs(item.change)),
+    color: item.color
+  })) || [];
+
+  const renderAiMentorCard = () => (
+    <motion.div className="ai-mentor-card" style={{
+      borderRadius: '16px',
+      background: `linear-gradient(135deg, rgba(${accentColor === '#3b82f6' ? '59, 130, 246' : accentColor === '#8b5cf6' ? '139, 92, 246' : '59, 130, 246'}, 0.05) 0%, rgba(${accentColor === '#3b82f6' ? '59, 130, 246' : accentColor === '#8b5cf6' ? '139, 92, 246' : '59, 130, 246'}, 0.02) 100%)`,
+      border: `2px solid ${accentColor}33`,
+      padding: '20px',
+      marginBottom: '0'
+    }}>
+      <div className="ai-header" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '15px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+          <Sparkles size={24} color={accentColor} />
+          <div>
+            <h3 style={{ margin: 0, color: accentColor, fontSize: '1.2rem' }}>{t.aiMentor}</h3>
+            <p style={{ margin: '4px 0 0 0', fontSize: '0.8rem', color: 'var(--text-dim)' }}>
+              {language === 'tr' ? 'Haftalik analizin ve odak onerilerin' : 'Weekly analysis and focus recommendations'}
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {!aiAdvice && !isAiLoading && (
+        <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+          <motion.button
+            className="ai-btn"
+            onClick={generateAiAdvice}
+            whileHover={{ scale: 1.02, boxShadow: `0 10px 30px ${accentColor}44` }}
+            whileTap={{ scale: 0.98 }}
+            style={{
+              backgroundColor: accentColor,
+              color: 'white',
+              border: 'none',
+              padding: '12px 28px',
+              borderRadius: '8px',
+              fontSize: '1rem',
+              fontWeight: '600',
+              cursor: 'pointer',
+              flex: '1 1 100%',
+            }}
+          >
+            ✨ {t.askMentor}
+          </motion.button>
+        </div>
+      )}
+
+      {isAiLoading && (
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          className="ai-loading"
+          style={{
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '40px 20px',
+            gap: '15px'
+          }}
+        >
+          <motion.div
+            animate={{ rotate: 360 }}
+            transition={{ duration: 2, repeat: Infinity, ease: 'linear' }}
+          >
+            <Loader size={32} color={accentColor} />
+          </motion.div>
+          <div style={{ textAlign: 'center' }}>
+            <span style={{ color: 'var(--text-main)', fontWeight: '600', fontSize: '1rem' }}>
+              {language === 'tr' ? 'Verilerini analiz ediyorum...' : 'Analyzing your data...'}
+            </span>
+            <p style={{ margin: '8px 0 0 0', color: 'var(--text-dim)', fontSize: '0.9rem' }}>
+              {language === 'tr' ? 'Hedeflerine ve trendlerine bakiyorum' : 'Reviewing your goals and trends'}
+            </p>
+          </div>
+        </motion.div>
+      )}
+
+      {aiAdvice && (
+        <motion.div
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="ai-response"
+          style={{
+            marginTop: '20px',
+            padding: '20px',
+            background: 'rgba(255, 255, 255, 0.05)',
+            borderRadius: '20px 20px 20px 4px',
+            border: '1px solid var(--border-color)',
+            fontSize: '0.95rem',
+            lineHeight: '1.8',
+            color: 'var(--text-main)',
+            whiteSpace: 'pre-line',
+            position: 'relative'
+          }}
+        >
+          <div style={{ position: 'absolute', bottom: '-10px', left: '-10px', background: accentColor, borderRadius: '50%', padding: '6px', display: 'flex', boxShadow: '0 4px 10px rgba(0,0,0,0.3)' }}>
+            <Sparkles size={16} color="#fff" />
+          </div>
+          <p style={{ margin: 0 }}>{aiAdvice}</p>
+        </motion.div>
+      )}
+
+      {aiAdvice && (
+        <div style={{ display: 'flex', gap: '10px', marginTop: '15px', flexWrap: 'wrap' }}>
+          <motion.button
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.95 }}
+            onClick={generateAiAdvice}
+            style={{
+              flex: '1 1 180px',
+              padding: '10px 16px',
+              background: `${accentColor}22`,
+              border: `2px solid ${accentColor}`,
+              color: accentColor,
+              borderRadius: '8px',
+              fontSize: '0.9rem',
+              fontWeight: '600',
+              cursor: 'pointer'
+            }}
+          >
+            {language === 'tr' ? 'Yenile' : 'Refresh'}
+          </motion.button>
+          <motion.button
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.95 }}
+            onClick={() => {
+              navigator.clipboard.writeText(aiAdvice);
+              alert(language === 'tr' ? 'Kopyalandi!' : 'Copied!');
+            }}
+            style={{
+              flex: '1 1 180px',
+              padding: '10px 16px',
+              background: `${accentColor}22`,
+              border: `2px solid ${accentColor}`,
+              color: accentColor,
+              borderRadius: '8px',
+              fontSize: '0.9rem',
+              fontWeight: '600',
+              cursor: 'pointer'
+            }}
+          >
+            {language === 'tr' ? 'Kopyala' : 'Copy'}
+          </motion.button>
+        </div>
+      )}
+    </motion.div>
+  );
 
   if (authLoading) {
     return (
-      <div className="splash-screen" data-theme={theme}>
-        <div className="splash-logo">
-          <img src="https://cdn-icons-png.flaticon.com/512/3256/3256114.png" alt="Logo" width="80" height="80" />
-        </div>
+      <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh', background: 'var(--bg-main)' }}>
+        <Loader className="spin" size={48} color="var(--brand-blue)" />
       </div>
     );
   }
 
   if (!user) {
-    return (
-      <div data-theme={theme}>
-        <Auth />
-      </div>
-    );
+    return <Auth />;
   }
 
   return (
-    <div className="dashboard-layout">
-      {/* Idle Screen Saver */}
-      <AnimatePresence>
-        {isIdle && (
-          <motion.div
-            className="idle-overlay"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            onClick={() => setIsIdle(false)}
-          >
-            <div className="idle-content">
-              <h1 className="idle-clock">
-                {new Date().toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' })}
-              </h1>
-              <p className="idle-message">{t.idleMessage}</p>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* Odak modundan çıkmak için tıklanabilir arkaplan */}
-      <AnimatePresence>
-        {isActive && isImmersive && activeTab === 'focus' && !isFullScreen && (
-            <motion.div
-                className="focus-exit-overlay"
-                onClick={() => setIsImmersive(false)}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                transition={{ duration: 0.5 }}
-            />
-        )}
-      </AnimatePresence>
-      {/* Sidebar (Kenar Çubuğu) */}
-      <motion.nav 
+    <div className="app">
+      <motion.nav
         className="sidebar"
-        animate={{ 
-          opacity: (isActive && isImmersive && activeTab === 'focus' && !isFullScreen) ? 0.1 : 1, 
-          pointerEvents: (isActive && isImmersive && activeTab === 'focus' && !isFullScreen) ? 'none' : 'auto',
-          y: isMobile && !isBottomNavVisible ? '100%' : '0%'
-        }}
-        transition={{ 
-          y: { type: "spring", stiffness: 400, damping: 40 },
-          opacity: { duration: 0.5 }
+        initial={{ x: -250 }}
+        animate={{ x: 0 }}
+        transition={{ type: "spring", stiffness: 300, damping: 30 }}
+        style={{
+          transform: isMobile && !isBottomNavVisible ? 'translateY(100%)' : 'translateY(0)',
+          transition: 'transform 0.3s ease-in-out',
+          ...(isMobile ? {
+            display: 'flex',
+            flexDirection: 'row',
+            justifyContent: 'space-between',
+            width: '100%',
+            padding: 0,
+            margin: 0,
+            gap: 0
+          } : {})
         }}
       >
-        <div className="sidebar-header" onClick={() => !isActive && setActiveTab('dashboard')}>
-          <h1>LifeTrack</h1>
-          <p>OS</p>
-        </div>
-        
-        <div className="sidebar-menu">
-          <button className={`sidebar-btn ${activeTab === 'dashboard' ? 'active' : ''}`} onClick={() => handleTabClick('dashboard')}>
-            <LayoutDashboard size={22} /> <span>{t.dashboard}</span>
-          </button>
-          <button className={`sidebar-btn ${activeTab === 'focus' ? 'active' : ''}`} onClick={() => handleTabClick('focus')}>
-            <Target size={22} /> <span>{t.focus}</span>
-          </button>
-          <button className={`sidebar-btn ${activeTab === 'analytics' ? 'active' : ''}`} onClick={() => handleTabClick('analytics')}>
-            <BarChart3 size={22} /> <span>{t.analytics}</span>
-          </button>
-        </div>
+        {!isMobile && (
+          <div className="sidebar-header">
+            <h1>LifeTrack OS</h1>
+          </div>
+        )}
 
-        {/* Hızlı Notlar (Scratchpad) */}
-        <div className="sidebar-scratchpad">
-          <button className={`sidebar-btn ${isScratchpadOpen ? 'active' : ''}`} onClick={() => setIsScratchpadOpen(!isScratchpadOpen)}>
-            <StickyNote size={22} /> <span>{t.quickNotes}</span>
-          </button>
-          <AnimatePresence>
-            {isScratchpadOpen && (
-              <motion.div
-                initial={{ height: 0, opacity: 0, marginTop: 0 }}
-                animate={{ height: 'auto', opacity: 1, marginTop: 10 }}
-                exit={{ height: 0, opacity: 0, marginTop: 0 }}
-                style={{ overflow: 'hidden', position: 'relative' }}
-              >
-                <div className="scratchpad-controls">
-                  <button 
-                    className="scratchpad-control-btn" 
-                    onClick={() => setIsScratchpadPreview(!isScratchpadPreview)}
-                    title={isScratchpadPreview ? t.edit : t.preview}
-                  >
-                    {isScratchpadPreview ? <Edit size={14} /> : <Eye size={14} />}
-                  </button>
-                  <button 
-                    className="scratchpad-control-btn"
-                    onClick={() => setIsScratchpadExpanded(true)}
-                    title={t.expand}
-                  >
-                    <Maximize size={14} />
-                  </button>
-                </div>
-                {isScratchpadPreview ? (
-                  <div className="scratchpad-preview markdown-body">
-                    {scratchpadContent ? (
-                      <Suspense fallback={<div className="loading-text">{t.loading}</div>}>
-                        <ReactMarkdown>{scratchpadContent}</ReactMarkdown>
-                      </Suspense>
-                    ) : (
-                      <div className="scratchpad-empty-preview">Markdown formatında metin yazarak önizlemeyi görün.</div>
-                    )}
-                   </div>
-                ) : (
-                  <textarea
-                    className="scratchpad-textarea"
-                    value={scratchpadContent}
-                    onChange={(e) => setScratchpadContent(e.target.value)}
-                    placeholder={t.typeHere}
-                  />
-                )}
-              </motion.div>
-            )}
-          </AnimatePresence>
-        </div>
-
-        <button className={`sidebar-btn sidebar-settings-btn ${activeTab === 'settings' ? 'active' : ''}`} onClick={() => handleTabClick('settings')}>
-          <Settings size={22} /> <span>{t.settings}</span>
+        <button 
+          className={`sidebar-btn ${activeTab === 'dashboard' ? 'active' : ''}`} 
+          onClick={() => handleTabClick('dashboard')}
+          style={isMobile ? { flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', margin: 0, padding: '10px 0', gap: '4px', borderRadius: 0 } : {}}
+        >
+          <LayoutDashboard size={22} /> 
+          <span style={isMobile ? { fontSize: '0.65rem', margin: 0 } : {}}>{t.dashboard}</span>
         </button>
 
-        <div className="sidebar-spacer"></div>
+        <button 
+          className={`sidebar-btn ${activeTab === 'focus' ? 'active' : ''}`} 
+          onClick={() => handleTabClick('focus')}
+          style={isMobile ? { flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', margin: 0, padding: '10px 0', gap: '4px', borderRadius: 0 } : {}}
+        >
+          <Target size={22} /> 
+          <span style={isMobile ? { fontSize: '0.65rem', margin: 0 } : {}}>{t.focus}</span>
+        </button>
 
-        {(isActive || isTimerCompleted) && (
+        <button 
+          className={`sidebar-btn ${activeTab === 'analytics' ? 'active' : ''}`} 
+          onClick={() => handleTabClick('analytics')}
+          style={isMobile ? { flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', margin: 0, padding: '10px 0', gap: '4px', borderRadius: 0 } : {}}
+        >
+          <BarChart3 size={22} /> 
+          <span style={isMobile ? { fontSize: '0.65rem', margin: 0 } : {}}>{t.analytics}</span>
+        </button>
+
+        <button 
+          className={`sidebar-btn ${activeTab === 'mentor' ? 'active' : ''}`} 
+          onClick={() => handleTabClick('mentor')}
+          style={isMobile ? { flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', margin: 0, padding: '10px 0', gap: '4px', borderRadius: 0 } : {}}
+        >
+          <Sparkles size={22} /> 
+          <span style={isMobile ? { fontSize: '0.65rem', margin: 0 } : {}}>{t.mentorTab}</span>
+        </button>
+
+        {!isMobile && (
+          <div className="sidebar-scratchpad">
+            <button className={`sidebar-btn ${isScratchpadOpen ? 'active' : ''}`} onClick={() => setIsScratchpadOpen(!isScratchpadOpen)}>
+              <StickyNote size={22} /> <span>{t.quickNotes}</span>
+            </button>
+            <AnimatePresence>
+              {isScratchpadOpen && (
+                <motion.div
+                  initial={{ height: 0, opacity: 0, marginTop: 0 }}
+                  animate={{ height: 'auto', opacity: 1, marginTop: 10 }}
+                  exit={{ height: 0, opacity: 0, marginTop: 0 }}
+                  style={{ overflow: 'hidden', position: 'relative' }}
+                >
+                  <div className="scratchpad-controls">
+                    <button
+                      className="scratchpad-control-btn"
+                      onClick={() => setIsScratchpadPreview(!isScratchpadPreview)}
+                      title={isScratchpadPreview ? t.edit : t.preview}
+                    >
+                      {isScratchpadPreview ? <Edit size={14} /> : <Eye size={14} />}
+                    </button>
+                    <button
+                      className="scratchpad-control-btn"
+                      onClick={() => setIsScratchpadExpanded(true)}
+                      title={t.expand}
+                    >
+                      <Maximize size={14} />
+                    </button>
+                  </div>
+                  {isScratchpadPreview ? (
+                    <div className="scratchpad-preview markdown-body">
+                      {scratchpadContent ? (
+                        <Suspense fallback={<div className="loading-text">{t.loading}</div>}>
+                          <ReactMarkdown>{scratchpadContent}</ReactMarkdown>
+                        </Suspense>
+                      ) : (
+                        <div className="scratchpad-empty-preview">Markdown formatında metin yazarak önizlemeyi görün.</div>
+                      )}
+                     </div>
+                  ) : (
+                    <textarea
+                      className="scratchpad-textarea"
+                      value={scratchpadContent}
+                      onChange={(e) => setScratchpadContent(e.target.value)}
+                      placeholder={t.typeHere}
+                    />
+                  )}
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
+        )}
+
+        <button 
+          className={`sidebar-btn ${!isMobile ? 'sidebar-settings-btn' : ''} ${activeTab === 'settings' ? 'active' : ''}`} 
+          onClick={() => handleTabClick('settings')}
+          style={isMobile ? { flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', margin: 0, padding: '10px 0', gap: '4px', borderRadius: 0 } : {}}
+        >
+          <Settings size={22} /> 
+          <span style={isMobile ? { fontSize: '0.65rem', margin: 0 } : {}}>{t.settings}</span>
+        </button>
+
+        {!isMobile && <div className="sidebar-spacer"></div>}
+
+        {!isMobile && (isActive || isTimerCompleted) && (
           <div className={`sidebar-timer ${isTimerCompleted ? 'completed' : ''}`} onClick={() => setActiveTab('focus')}>
             <div className="sidebar-timer-dot"></div>
             <span>{isTimerCompleted ? t.completed : `${Math.floor(timeLeft/60)}:${(timeLeft%60).toString().padStart(2,'0')}`}</span>
           </div>
         )}
-
-        <div className="sidebar-footer">
-          <button className="sidebar-btn" onClick={handleSignOut} style={{ color: '#ef4444' }}>
-            <LogOut size={22} /> <span>{t.logout}</span>
-          </button>
-        </div>
       </motion.nav>
 
       <main className="main-content">
-        <motion.div 
+        <motion.div
           className="header-top"
+          initial={{ opacity: 0, y: -20 }}
           animate={{ opacity: (isActive && isImmersive && activeTab === 'focus' && !isFullScreen) ? 0.1 : 1, pointerEvents: (isActive && isImmersive && activeTab === 'focus' && !isFullScreen) ? 'none' : 'auto' }}
           transition={{ duration: 0.5 }}
         >
           <div className="header-content">
           <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
             <div style={{display:'flex', flexDirection:'column'}}>
-              <h2 className="header-title" style={{marginBottom: '2px'}}>LifeTrack OS</h2>
+              <h2
+                className={isPremiumUser ? 'header-title header-title-premium' : 'header-title'}
+                style={{
+                  marginBottom: '2px',
+                  color: isPremiumUser ? '#FF8C00' : undefined,
+                  textShadow: isPremiumUser ? '0 0 20px rgba(255, 140, 0, 0.9), 0 0 30px rgba(255, 140, 0, 0.6)' : 'none',
+                  fontWeight: isPremiumUser ? 'bold' : undefined,
+                  WebkitTextFillColor: isPremiumUser ? '#FF8C00' : undefined,
+                  background: isPremiumUser ? 'none' : undefined
+                }}
+              >
+                LifeTrack OS
+              </h2>
               <span style={{fontSize:'0.85rem', color:'var(--text-dim)', display:'flex', alignItems:'center', gap:'5px', fontWeight: 500}}>
-                  {t.welcome}, {user.displayName || user.email?.split('@')[0]}
+                  {t.welcome}, {displayUsername}
                   <AnimatePresence>
                       {showWave && (
                           <motion.span
@@ -1287,27 +2083,36 @@ function App() {
                   </AnimatePresence>
               </span>
             </div>
+          </div>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            {isMobile && (isActive || isTimerCompleted) && (
+              <div className={`sidebar-timer ${isTimerCompleted ? 'completed' : ''}`} onClick={() => setActiveTab('focus')} style={{ margin: 0, padding: '6px 10px', minHeight: 'auto', fontSize: '0.85rem' }}>
+                <div className="sidebar-timer-dot" style={{ width: '6px', height: '6px' }}></div>
+                <span>{isTimerCompleted ? t.completed : `${Math.floor(timeLeft/60)}:${(timeLeft%60).toString().padStart(2,'0')}`}</span>
+              </div>
+            )}
             <motion.div whileHover={{ scale: 1.05 }} className="streak-badge">
               <Flame size={20} color={streak > 0 ? "#ef4444" : "#64748b"} />
               <span style={{ color: streak > 0 ? "#ef4444" : "#64748b", fontSize: '0.9rem' }}>{streak} {t.streak}</span>
             </motion.div>
-          </div>
-          {/* Kullanıcı Profili */}
-          <div className="user-profile" onClick={() => { setNewDisplayName(user.displayName || ''); setIsProfileModalOpen(true); }} style={{cursor: 'pointer'}} title={t.editProfile}>
-            <span className="user-name">{user.displayName || user.email?.split('@')[0]}</span>
-            {user.photoURL ? (
-              <img src={user.photoURL} alt="Profil" className="user-avatar" />
-            ) : (
-              <div className="user-avatar-placeholder">{user.email?.charAt(0).toUpperCase()}</div>
-            )}
+            {/* Kullanıcı Profili */}
+            <div className="user-profile" onClick={() => { setNewDisplayName(displayUsername !== 'Kullanıcı' ? displayUsername : ''); setIsProfileModalOpen(true); }} style={{cursor: 'pointer'}} title={t.editProfile}>
+              <span className="user-name">{displayUsername}</span>
+              {user.photoURL ? (
+                <img src={user.photoURL} alt="Profil" className="user-avatar" />
+              ) : (
+                <div className="user-avatar-placeholder">{displayUsername.charAt(0).toUpperCase()}</div>
+              )}
+            </div>
           </div>
           </div>
         </motion.div>
-        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="app-container" style={{paddingTop: '0'}}>
+        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="app-container">
 
       <AnimatePresence mode='wait'>
         {activeTab === 'dashboard' && (
-          <motion.div 
+          <motion.div
             key="dashboard"
             variants={pageVariants}
             initial="initial"
@@ -1318,18 +2123,18 @@ function App() {
             {/* Günün Öncelikli Hedefi */}
             <motion.div className="daily-goal-wrapper">
               <div className={`daily-goal-container ${currentGoal.completed ? 'completed' : ''}`}>
-                <button 
+                <button
                   className={`daily-goal-checkbox ${currentGoal.completed ? 'active' : ''}`}
                   onClick={toggleGoalCompletion}
                   disabled={!isEditable}
                 >
                   {currentGoal.completed && <Check size={20} color="white" strokeWidth={3} />}
                 </button>
-                <input 
-                  type="text" 
-                  className="daily-goal-input" 
+                <input
+                  type="text"
+                  className="daily-goal-input"
                   placeholder={`✨ ${t.dailyFocus}`}
-                  value={currentGoal.text} 
+                  value={currentGoal.text}
                   onChange={(e) => handleGoalChange(e.target.value)}
                   disabled={!isEditable}
                 />
@@ -1361,8 +2166,8 @@ function App() {
               {currentActivities.map((act, index) => {
                 const prog = Math.min((act.value / (act.goal || 1)) * 100, 100);
                 return (
-                  <motion.div 
-                    key={act.id} 
+                  <motion.div
+                    key={act.id}
                     layout
                     initial={{ opacity: 0, scale: 0.9 }}
                     animate={{ opacity: 1, scale: 1 }}
@@ -1374,15 +2179,16 @@ function App() {
                     dragConstraints={{ top: 0, bottom: 0 }}
                     dragElastic={0.7}
                     onDragEnd={(e, { offset }) => {
-                      // Mobilde yukarı kaydırınca sil (Yatay kaydırma navigasyon için kullanılıyor)
                       if (offset.y < -100 && isEditable) deleteActivity(act.id);
                     }}
                     onClick={() => isEditable && setEditingActivity(act)}
-                    onDragStart={(e) => e.dataTransfer.setData('text/plain', index)}
+                    onDragStart={(e) => {
+                      if (e.dataTransfer) e.dataTransfer.setData('text/plain', index);
+                    }}
                     onDragOver={(e) => e.preventDefault()}
                     onDrop={(e) => {
                       e.preventDefault();
-                      if (!isEditable) return;
+                      if (!isEditable || !e.dataTransfer) return;
                       const dragIndex = parseInt(e.dataTransfer.getData('text/plain'));
                       if (dragIndex === index) return;
                       const newArr = [...currentActivities];
@@ -1407,9 +2213,9 @@ function App() {
                     <div className="progress-container"><div className="progress-bar" style={{width: `${prog}%`, backgroundColor: accentColor}}></div></div>
                     <div style={{marginTop: '15px', paddingTop: '10px', borderTop: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.75rem', color: 'var(--text-dim)'}}>
                       <span>Haftalık Hedef:</span>
-                      <input 
-                        type="number" 
-                        value={act.weeklyGoal || ''} 
+                      <input
+                        type="number"
+                        value={act.weeklyGoal || ''}
                         onClick={(e) => e.stopPropagation()}
                         onChange={(e) => updateData(act.id, 'weeklyGoal', e.target.value)}
                         disabled={!isEditable}
@@ -1442,40 +2248,48 @@ function App() {
               ))}
             </div>
 
-            {isEditable && <form className="add-form" onSubmit={addActivity}>
-              <input type="text" placeholder="Örn: Kitap Okuma" value={newName} onChange={(e) => setNewName(e.target.value)} required />
-              <input type="number" placeholder={t.dailyGoal} value={newGoal} onChange={(e) => setNewGoal(e.target.value)} required min="1" />
-              <input type="number" placeholder={t.weeklyGoal} value={newWeeklyGoal} onChange={(e) => setNewWeeklyGoal(e.target.value)} min="1" />
-              <div className="form-group" style={{width: '100%'}}>
-                <label style={{marginLeft: 0, marginBottom: 5}}>{t.icon}</label>
-                <div className="icon-picker-grid">
-                  {availableIcons.map(iconName => (
-                      <button
-                          type="button"
-                          key={iconName}
-                          className={`icon-picker-btn ${newIcon === iconName ? 'active' : ''}`}
-                          onClick={() => setNewIcon(iconName)}
-                          title={iconName}
-                      >
-                          <Icon name={iconName} size={24} />
-                      </button>
-                  ))}
+            {isEditable && (
+              <div className="activity-builder-card">
+                <div className="activity-builder-header">
+                  <div>
+                    <h3>{t.newActivity}</h3>
+                    <p>{t.goalBuilderDescription}</p>
+                  </div>
                 </div>
+
+                <form className="add-form activity-builder-form" onSubmit={addActivity}>
+                  <input type="text" placeholder="Orn: Kitap Okuma" value={newName} onChange={(e) => setNewName(e.target.value)} required />
+                  <input type="number" placeholder={t.dailyGoal} value={newGoal} onChange={(e) => setNewGoal(e.target.value)} required min="1" />
+                  <input type="number" placeholder={t.weeklyGoal} value={newWeeklyGoal} onChange={(e) => setNewWeeklyGoal(e.target.value)} min="1" />
+                  <div className="icon-picker-grid" style={{ maxHeight: '180px', overflowY: 'auto' }}>
+                    {availableIcons.map((iconName) => (
+                      <button
+                        type="button"
+                        key={iconName}
+                        className={`icon-picker-btn ${newIcon === iconName ? 'active' : ''}`}
+                        onClick={() => setNewIcon(iconName)}
+                        title={iconName}
+                      >
+                        <Icon name={iconName} size={22} />
+                      </button>
+                    ))}
+                  </div>
+                  <button type="submit" className="add-btn">{t.newActivity}</button>
+                </form>
               </div>
-              <button type="submit" className="add-btn">{t.newActivity}</button>
-            </form>}
+            )}
 
             <div className="chart-card">
               <h2 style={{marginTop:0, marginBottom:'30px'}}>{t.weeklyEfficiency}</h2>
               <Suspense fallback={<div style={{display:'flex', justifyContent:'center', padding:'50px'}}><Loader className="spin" size={32} color={accentColor}/></div>}>
-                <DashboardChart data={generateChartData()} chartColor={chartColor} />
+                <DashboardChart data={generateChartData()} chartColor={chartColor} isPremium={isPremiumUser} />
               </Suspense>
             </div>
           </motion.div>
         )}
 
         {activeTab === 'focus' && (
-          <motion.div 
+          <motion.div
             key="focus"
             variants={pageVariants}
             initial="initial"
@@ -1483,12 +2297,12 @@ function App() {
             exit="exit"
             transition={pageTransition}
           >
-            <motion.div 
-              whileHover={!isFullScreen ? { y: -5 } : {}} 
+            <motion.div
+              whileHover={!isFullScreen ? { y: -5 } : {}}
               className={`pomodoro-card ${isFullScreen ? 'fullscreen' : ''} ${isActive ? 'focus-active' : ''}`}
             >
               {isActive && <div className="focus-background"></div>}
-              <button 
+              <button
                 className="fullscreen-btn"
                 onClick={() => setIsFullScreen(!isFullScreen)}
                 title={isFullScreen ? "Küçült" : "Tam Ekran"}
@@ -1497,9 +2311,9 @@ function App() {
               </button>
               <div style={{marginBottom: '15px'}}>
                 <label style={{marginRight: '10px', fontWeight: 'bold', color: 'var(--text-main)'}}>{t.duration}</label>
-                <input 
-                  type="number" 
-                  value={pomodoroDuration} 
+                <input
+                  type="number"
+                  value={pomodoroDuration}
                   onChange={(e) => {
                     const val = e.target.value;
                     setPomodoroDuration(val);
@@ -1524,36 +2338,78 @@ function App() {
                 }}>{isActive ? t.stop : t.start}</button>
                 <button className="timer-btn" style={{background:'#ef4444'}} onClick={() => {setIsActive(false); setTimeLeft((parseInt(pomodoroDuration) || 25)*60); setIsTimerCompleted(false);}}>{t.reset}</button>
               </div>
+
+              {/* Arka Plan Ses Seçici */}
+              <div className="ambient-sound-selector" style={{ marginTop: '30px', textAlign: 'center' }}>
+                <label style={{ color: 'var(--text-dim)', fontSize: '0.95rem', display: 'block', marginBottom: '15px', fontWeight: 600 }}>
+                  <Music size={16} style={{ verticalAlign: 'middle', marginRight: '5px' }} />
+                  {t.ambientSound}
+                </label>
+                <div style={{ display: 'flex', justifyContent: 'center', flexWrap: 'wrap', gap: '16px' }}>
+                  {[
+                    { value: 'none', label: t.none, icon: <VolumeX size={24} /> },
+                    { value: 'natureRain', label: t.natureRain, icon: <CloudRain size={24} />, premium: true },
+                    { value: 'cafe', label: t.cafe, icon: <Coffee size={24} />, premium: true },
+                    { value: 'fireplace', label: t.fireplace, icon: <Flame size={24} />, premium: true },
+                    { value: 'forest', label: t.forest, icon: <TreePine size={24} />, premium: true }
+                  ].map((sound) => {
+                    const isLocked = !!sound.premium && !isPremiumUser;
+                    const isActive = ambientSound === sound.value;
+                    return (
+                      <button
+                        key={sound.value}
+                        type="button"
+                        className={`ambient-sound-btn ${isActive ? 'active' : ''} ${isLocked ? 'locked' : ''}`}
+                        onClick={() => {
+                          if (isLocked) {
+                            openPremiumModal();
+                            return;
+                          }
+                          setAmbientSound(sound.value);
+                        }}
+                        style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '56px', height: '56px', padding: '0', position: 'relative', borderRadius: '50%', border: isActive ? `2px solid ${accentColor}` : '2px solid var(--border-color)', background: isActive ? `${accentColor}15` : 'transparent', cursor: 'pointer', transition: 'all 0.2s ease' }}
+                      >
+                        <span style={{ color: isActive ? accentColor : 'var(--text-dim)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{sound.icon}</span>
+                        {isLocked && (
+                          <div style={{ position: 'absolute', top: '-4px', right: '-4px', background: '#fbbf24', borderRadius: '50%', padding: '3px', display: 'flex', border: '1px solid var(--input-bg)' }}>
+                            <Lock size={14} color="#000" />
+                          </div>
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
             </motion.div>
 
             {/* To-Do Listesi */}
             {!isFullScreen && (
-              <motion.div 
+              <motion.div
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 className="todo-card"
               >
                 <h3 style={{margin: '0 0 20px 0', display:'flex', alignItems:'center', gap:'10px'}}><Check size={20} color="var(--brand-blue)"/> {t.dailyTasks}</h3>
-                
+
                 <form onSubmit={addTodo} className="todo-form">
-                  <input 
-                    type="text" 
+                  <input
+                    type="text"
                     placeholder={t.newTask}
-                    value={newTodo} 
+                    value={newTodo}
                     onChange={(e) => setNewTodo(e.target.value)}
                   />
-                  <button type="submit"><Plus size={20}/></button>
+                  <button type="submit" className="todo-submit-btn" disabled={!newTodo.trim()} title="Görev Ekle"><Plus size={24}/></button>
                 </form>
 
                 <div className="todo-list">
                   <AnimatePresence mode='popLayout'>
                   {todos.map((todo, index) => (
-                    <motion.div 
-                      key={todo.id} 
+                    <motion.div
+                      key={todo.id}
                       layout
-                      initial={{ opacity: 0, y: 10 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      exit={{ opacity: 0, x: -100, transition: { duration: 0.2 } }}
+                      initial={{ opacity: 0, y: 20, scale: 0.95 }}
+                      animate={{ opacity: 1, y: 0, scale: 1 }}
+                      exit={{ opacity: 0, x: -50, scale: 0.9, transition: { duration: 0.2 } }}
                       className={`todo-item ${todo.completed ? 'completed' : ''}`}
                       drag="x"
                       dragConstraints={{ left: 0, right: 0 }}
@@ -1578,14 +2434,34 @@ function App() {
                       }}
                     >
                       <div className="todo-content" onClick={() => toggleTodo(todo.id)}>
-                        <div className="custom-checkbox">{todo.completed && <Check size={14} color="white"/>}</div>
+                        <div className="custom-checkbox">
+                          <AnimatePresence>
+                            {todo.completed && (
+                              <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} exit={{ scale: 0 }}>
+                                <Check size={16} color="white" strokeWidth={3} />
+                              </motion.div>
+                            )}
+                          </AnimatePresence>
+                        </div>
                         <span>{todo.text}</span>
                       </div>
-                      <button onClick={() => deleteTodo(todo.id)} className="todo-delete"><Trash2 size={16}/></button>
+                      <button onClick={() => deleteTodo(todo.id)} className="todo-delete" title="Sil"><Trash2 size={18}/></button>
                     </motion.div>
                   ))}
                   </AnimatePresence>
-                  {todos.length === 0 && <p style={{textAlign:'center', color:'var(--text-dim)', fontStyle:'italic'}}>{t.noTasks}</p>}
+                  {todos.length === 0 && (
+                    <motion.div
+                      initial={{ opacity: 0, scale: 0.9 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      style={{textAlign:'center', color:'var(--text-dim)', padding: '30px 10px'}}
+                    >
+                      <ListTodo size={48} style={{ opacity: 0.2, marginBottom: '15px' }}/>
+                      <p style={{ margin: 0, fontSize: '1.1rem', fontWeight: 600, color: 'var(--text-main)' }}>{t.noTasks}</p>
+                      <p style={{ margin: '8px 0 0 0', fontSize: '0.9rem', opacity: 0.7 }}>
+                        {language === 'tr' ? 'Günün ilk hedefini ekleyerek başla!' : 'Start by adding your first goal for today!'}
+                      </p>
+                    </motion.div>
+                  )}
                 </div>
               </motion.div>
             )}
@@ -1593,7 +2469,7 @@ function App() {
         )}
 
         {activeTab === 'analytics' && (
-          <motion.div 
+          <motion.div
             key="analytics"
             variants={pageVariants}
             initial="initial"
@@ -1601,16 +2477,86 @@ function App() {
             exit="exit"
             transition={pageTransition}
           >
-            <div className="chart-card" style={{marginBottom: '20px'}} ref={chartCardRef}>
-              <h2 style={{marginTop:0, marginBottom:'30px'}}>{t.performance4Weeks}</h2>
-              <Suspense fallback={<div style={{display:'flex', justifyContent:'center', padding:'50px'}}><Loader className="spin" size={32} color={accentColor}/></div>}>
-                <AnalyticsChart data={analysisData.chartData} chartColor={chartColor} />
-              </Suspense>
+            {isPremiumUser ? (
+              <div className="premium-report-card" ref={reportCardRef} style={{ marginBottom: '20px', padding: '20px', borderRadius: '16px', background: 'linear-gradient(145deg, rgba(251, 191, 36, 0.14) 0%, rgba(249, 115, 22, 0.08) 42%, rgba(30, 41, 59, 0.18) 100%)', border: '1px solid rgba(251, 191, 36, 0.42)', backdropFilter: 'blur(10px)', boxShadow: '0 8px 32px rgba(251, 191, 36, 0.22)' }}>
+                <div className="insight-card-header" style={{ marginBottom: '16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <h3 style={{ display: 'flex', alignItems: 'center', gap: '8px', margin: 0, color: '#fbbf24', fontSize: '1.1rem' }}><Crown size={20} color="#fbbf24"/> {t.monthlyReport}</h3>
+                </div>
+
+                <div style={{ height: 300, marginBottom: '16px' }}>
+                  <SafeChartContainer height="100%" minHeight={300} debounce={80}>
+                    <PieChart>
+                      <Pie
+                        data={pieData}
+                        dataKey="value"
+                        nameKey="name"
+                        cx="50%"
+                        cy="50%"
+                        outerRadius={80}
+                        innerRadius={50}
+                        paddingAngle={4}
+                      >
+                        {pieData.map((entry, index) => (
+                          <Cell key={`cell-${index}`} fill={entry.color} />
+                        ))}
+                      </Pie>
+                      <RechartsTooltip cursor={false} formatter={(value) => [`${value}%`, language === 'tr' ? 'Pay' : 'Share']} contentStyle={{backgroundColor: 'var(--card-bg)', border: '1px solid var(--border-color)', borderRadius: '8px'}} />
+                    </PieChart>
+                  </SafeChartContainer>
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', paddingTop: '12px', borderTop: '1px solid rgba(251, 191, 36, 0.2)' }}>
+                  <div style={{ padding: '12px', borderRadius: '16px', background: 'rgba(251, 191, 36, 0.1)', border: '1px solid rgba(251, 191, 36, 0.26)' }}>
+                    <p style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.75rem', color: 'var(--text-dim)', margin: '0 0 6px 0' }}><Calendar size={14} color="#fbbf24" />{language === 'tr' ? 'En İyi Gün' : 'Best Day'}</p>
+                    <p style={{ fontSize: '0.95rem', color: '#fbbf24', margin: 0, fontWeight: '600' }}>{analysisData.bestDay || '—'}</p>
+                  </div>
+                  <div style={{ padding: '12px', borderRadius: '16px', background: 'rgba(249, 115, 22, 0.1)', border: '1px solid rgba(249, 115, 22, 0.22)' }}>
+                    <p style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.75rem', color: 'var(--text-dim)', margin: '0 0 6px 0' }}><Flame size={14} color="#fb923c" />{language === 'tr' ? 'Seri' : 'Streak'}</p>
+                    <p style={{ fontSize: '0.95rem', color: '#fb923c', margin: 0, fontWeight: '600' }}>{analysisData.maxStreak} {t.streak}</p>
+                  </div>
+                  <div style={{ gridColumn: '1 / -1', padding: '12px', borderRadius: '16px', background: 'rgba(59, 130, 246, 0.08)', border: '1px solid rgba(59, 130, 246, 0.22)' }}>
+                    <p style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.75rem', color: 'var(--text-dim)', margin: '0 0 6px 0' }}><Activity size={14} color={accentColor} />{language === 'tr' ? 'Özet' : 'Summary'}</p>
+                    <p style={{ fontSize: '0.95rem', color: 'var(--text-main)', margin: 0, fontWeight: '600' }}>
+                      {language === 'tr'
+                        ? `Bu hafta ${analysisData.thisWeekHours} saat odaklandın ve son 3 günde ortalama %${Math.round((analysisData.weeklyTrend.slice(-3).reduce((sum, d) => sum + (d.score || 0), 0) / Math.max(analysisData.weeklyTrend.slice(-3).length, 1)))} aktiflik yakaladın.`
+                        : `You focused ${analysisData.thisWeekHours} hours this week with an average ${Math.round((analysisData.weeklyTrend.slice(-3).reduce((sum, d) => sum + (d.score || 0), 0) / Math.max(analysisData.weeklyTrend.slice(-3).length, 1)))}% activity in the last 3 days.`}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              renderPremiumSpotlight(t.monthlyReport, t.proLockedMessage)
+            )}
+
+            <div className="chart-card" style={{ marginBottom: '20px' }}>
+              <h3 style={{ margin: '0 0 16px 0', fontSize: '1.2rem' }}>{t.threeDayReport}</h3>
+              <div style={{ width: '100%', height: 300 }}>
+                <SafeChartContainer height="100%" minHeight={300} debounce={80}>
+                  <BarChart
+                    data={analysisData.weeklyTrend.slice(-3).filter((item) => (item.score || 0) > 0).map((item) => ({
+                      day: item.day,
+                      score: item.score,
+                    }))}
+                    margin={{ top: 10, right: 10, left: -20, bottom: 20 }}
+                  >
+                    <CartesianGrid vertical={false} stroke="transparent" />
+                    <XAxis dataKey="day" stroke="var(--text-dim)" style={{ fontSize: '0.85rem' }} />
+                    <YAxis stroke="var(--text-dim)" style={{ fontSize: '0.85rem' }} domain={[0, 100]} />
+                    <Bar
+                      dataKey="score"
+                      fill={chartColor}
+                      radius={[8, 8, 0, 0]}
+                      isAnimationActive={true}
+                    />
+                    <RechartsTooltip cursor={false} contentStyle={{backgroundColor: 'var(--card-bg)', border: '1px solid var(--border-color)', borderRadius: '8px', color: 'var(--text-main)'}}/>
+                  </BarChart>
+                </SafeChartContainer>
+              </div>
             </div>
 
             <div className="stat-card-grid">
               {/* Rekor Seri Kartı */}
-              <motion.div className="stat-card" whileHover={{ y: -5 }}>
+              <motion.div className="stat-card" whileHover={{ y: -5, boxShadow: '0 10px 25px -5px #f59e0b66', borderColor: '#f59e0b' }} transition={{ duration: 0.2 }}>
                   <h4 style={{color: '#f59e0b', margin: '0 0 5px 0'}}>{t.recordStreak}</h4>
                   <div className="stat-card-change" style={{color: '#f59e0b'}}>
                     <Trophy size={24}/>
@@ -1620,71 +2566,38 @@ function App() {
               </motion.div>
 
               {analysisData.comparisonData.map(item => (
-                <motion.div key={item.name} className="stat-card" whileHover={{ y: -5 }}>
+                <motion.div key={item.name} className="stat-card" whileHover={{ y: -5, boxShadow: `0 10px 25px -5px ${item.color}66`, borderColor: item.color }} transition={{ duration: 0.2 }}>
                   <h4 style={{color: item.color, margin: '0 0 5px 0'}}>{item.name}</h4>
                   <div className="stat-card-change" style={{color: item.change > 0 ? '#10b981' : item.change < 0 ? '#ef4444' : 'var(--text-dim)'}}>
                     {item.change > 0 ? <ArrowUp size={24}/> : item.change < 0 ? <ArrowDown size={24}/> : null}
                     {Math.abs(item.change)}%
                   </div>
                   <p className="stat-card-note">{t.vsLastWeek}</p>
+                  {/* Mini Trend Chart */}
+                  <div style={{ marginTop: '15px', paddingTop: '15px', borderTop: '1px solid var(--border-color)' }}>
+                    <MiniTrendChart data={item.trend} color={item.color} />
+                  </div>
                 </motion.div>
               ))}
-            </div>
-
-            {/* AI Mentor Bölümü */}
-            <div className="ai-mentor-card">
-              <div className="ai-header">
-                <Sparkles size={24} color={accentColor} />
-                <h3>{t.aiMentor}</h3>
-              </div>
-              
-              {!aiAdvice && !isAiLoading && (
-                <button className="ai-btn" onClick={generateAiAdvice} style={{backgroundColor: accentColor}}>
-                  {t.askMentor}
-                </button>
-              )}
-
-              {isAiLoading && (
-                <div className="ai-loading">
-                  <Loader size={24} className="spin" color={accentColor} />
-                  <span>{t.analyzing}</span>
-                </div>
-              )}
-
-              {aiAdvice && (
-                <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="ai-response">
-                  <p>{aiAdvice}</p>
-                </motion.div>
-              )}
-            </div>
-
-            <div className="ai-insight-card" ref={reportCardRef}>
-              <div className="insight-card-header">
-                <h3>{t.weeklyReport}</h3>
-                <button className="icon-btn" onClick={handleDownloadReport} title={t.downloadReport}>
-                  <Download size={18} />
-                </button>
-              </div>
-              <ul>
-                {analysisData.bestDay && <li>📅 {t.bestDay} <strong style={{color: 'var(--brand-blue)', marginLeft:'5px'}}>{analysisData.bestDay}</strong>{t.bestDaySuffix}</li>}
-                {analysisData.comparisonData.map(item => {
-                  if (item.change > 15) {
-                    return <li key={item.name}>🚀 <strong style={{color: item.color}}>{item.name}</strong> {t.reportJump.replace('{change}', item.change)}</li>;
-                  } else if (item.change < -15) {
-                    return <li key={item.name}>📉 <strong style={{color: item.color}}>{item.name}</strong> {t.reportDrop.replace('{change}', Math.abs(item.change))}</li>;
-                  } else if (item.change !== 0) {
-                    return <li key={item.name}>✨ <strong style={{color: item.color}}>{item.name}</strong> {t.reportStable}</li>;
-                  } else {
-                    return <li key={item.name}>🧘 <strong style={{color: item.color}}>{item.name}</strong> {t.reportMaintain}</li>;
-                  }
-                })}
-              </ul>
             </div>
           </motion.div>
         )}
 
+        {activeTab === 'mentor' && (
+          <motion.div
+            key="mentor"
+            variants={pageVariants}
+            initial="initial"
+            animate="animate"
+            exit="exit"
+            transition={pageTransition}
+          >
+            {renderAiMentorCard()}
+          </motion.div>
+        )}
+
         {activeTab === 'settings' && (
-          <motion.div 
+          <motion.div
             key="settings"
             variants={pageVariants}
             initial="initial"
@@ -1722,13 +2635,9 @@ function App() {
                   <Lock size={24} color="#8b5cf6" />
                   <span>{t.changePassword}</span>
                 </button>
-                <button onClick={handleClearData} className="settings-btn" style={{ color: '#ef4444', borderColor: 'rgba(239, 68, 68, 0.3)' }}>
-                  <Trash size={24} />
-                  <span>{t.clearData}</span>
-                </button>
-                <button onClick={handleDeleteAccount} className="settings-btn" style={{ gridColumn: '1 / -1', background: 'rgba(239, 68, 68, 0.1)', color: '#ef4444', borderColor: 'rgba(239, 68, 68, 0.3)' }}>
-                  <ShieldAlert size={24} />
-                  <span>{t.deleteAccount}</span>
+                <button onClick={() => signOut(auth)} className="settings-btn" style={{ background: 'rgba(239, 68, 68, 0.1)', color: '#ef4444', borderColor: 'rgba(239, 68, 68, 0.3)' }}>
+                  <X size={24} />
+                  <span>{t.logout}</span>
                 </button>
               </div>
 
@@ -1738,36 +2647,20 @@ function App() {
                   {accentColors.map(c => (
                     <button
                       key={c.value}
-                      className={`accent-color-btn ${accentColor === c.value ? 'active' : ''}`}
+                      className={`accent-color-btn ${accentColor === c.value ? 'active' : ''} ${c.value === '#f59e0b' ? 'accent-color-btn-premium' : ''}`}
                       style={{backgroundColor: c.value}}
-                      onClick={() => setAccentColor(c.value)}
+                      onClick={() => {
+                        if (c.value === '#f59e0b' && !isPremiumUser) {
+                          openPremiumModal();
+                          return;
+                        }
+                        setAccentColor(c.value);
+                      }}
                       title={c.label}
                     >
-                      {accentColor === c.value && <Check size={20} color="white" strokeWidth={3} />}
+                      {c.value === '#f59e0b' && <Lock size={14} className="accent-color-lock" />}
                     </button>
                   ))}
-                </div>
-              </div>
-
-              <div style={{marginTop: '30px'}}>
-                <h3 className="stats-title">{t.alarmSound}</h3>
-                <div className="settings-grid">
-                  <button onClick={() => setAlarmSetting('beep')} className={`settings-btn ${alarmSetting === 'beep' ? 'active' : ''}`}>
-                      <Volume2 size={24} />
-                      <span>{t.beepSound}</span>
-                  </button>
-                  <button onClick={() => setAlarmSetting('chime')} className={`settings-btn ${alarmSetting === 'chime' ? 'active' : ''}`}>
-                      <BellRing size={24} />
-                      <span>{t.chimeSound}</span>
-                  </button>
-                  <button onClick={() => setAlarmSetting('vibrate_only')} className={`settings-btn ${alarmSetting === 'vibrate_only' ? 'active' : ''}`}>
-                      <Vibrate size={24} />
-                      <span>{t.vibrateOnly}</span>
-                  </button>
-                  <button onClick={() => setAlarmSetting('silent')} className={`settings-btn ${alarmSetting === 'silent' ? 'active' : ''}`}>
-                      <VolumeX size={24} />
-                      <span>{t.silent}</span>
-                  </button>
                 </div>
               </div>
             </div>
@@ -1775,17 +2668,17 @@ function App() {
         )}
       </AnimatePresence>
 
-      {/* Profil Modal */}
+      {/* Profil Düzenleme Modalı */}
       <AnimatePresence>
         {isProfileModalOpen && (
-          <motion.div 
+          <motion.div
             className="modal-overlay"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             onClick={() => setIsProfileModalOpen(false)}
           >
-            <motion.div 
+            <motion.div
               className="modal-content"
               initial={{ scale: 0.8, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
@@ -1793,39 +2686,47 @@ function App() {
               onClick={(e) => e.stopPropagation()}
             >
               <button className="modal-close" onClick={() => setIsProfileModalOpen(false)}><X size={24}/></button>
-              <div style={{textAlign: 'center', marginBottom: '20px'}}>
-                {selectedAvatar || user.photoURL ? (
-                  <img src={selectedAvatar || user.photoURL} alt="Profil" className="modal-avatar" onClick={() => fileInputRef.current.click()} title={t.uploadPhoto}/>
-                ) : (
-                  <div className="modal-avatar-placeholder" onClick={() => fileInputRef.current.click()} title={t.uploadPhoto}>{user.email?.charAt(0).toUpperCase()}</div>
-                )}
-                <h2 style={{margin: '10px 0 5px 0'}}>{user.displayName || 'Kullanıcı'}</h2>
-                <p style={{color: 'var(--text-dim)', margin: 0}}>{user.email}</p>
-                
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '5px', marginTop: '10px', fontSize: '0.8rem', color: 'var(--text-dim)' }}>
-                  {user.providerData[0]?.providerId === 'google.com' ? (
-                    <><svg width="16" height="16" viewBox="0 0 24 24"><path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/><path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/><path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/><path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/></svg> Google ile giriş yapıldı</>
-                  ) : (
-                    <><Mail size={16} /> E-posta ile giriş yapıldı</>
-                  )}
-                </div>
+              <h2 style={{marginTop: 0, marginBottom: '20px'}}>{t.editProfile}</h2>
 
-              </div>
-              
               <form onSubmit={handleUpdateProfile} className="edit-form">
                 <div className="form-group">
-                    <div className="avatar-selector">
-                      {avatarOptions.map((url, index) => (
-                        <img key={index} src={url} alt="Avatar" className={`avatar-option ${selectedAvatar === url ? 'selected' : ''}`} onClick={() => setSelectedAvatar(url)} />
+                    <label>{t.chooseAvatar}</label>
+                    <div className="avatar-grid">
+                      {avatarOptions.map((avatar, i) => (
+                        <button
+                          type="button"
+                          key={i}
+                          className={`avatar-option ${selectedAvatar === avatar ? 'selected' : ''}`}
+                          onClick={() => setSelectedAvatar(avatar)}
+                          style={{
+                            width: '60px',
+                            height: '60px',
+                            borderRadius: '50%',
+                            border: selectedAvatar === avatar ? '3px solid var(--brand-blue)' : '2px solid var(--border-color)',
+                            padding: 0,
+                            cursor: 'pointer',
+                            backgroundImage: `url(${avatar})`,
+                            backgroundSize: 'cover',
+                            backgroundPosition: 'center'
+                          }}
+                        />
                       ))}
                     </div>
-                    <input 
-                      type="file" 
-                      ref={fileInputRef} 
-                      onChange={handleFileUpload} 
-                      accept="image/*" 
-                      style={{display:'none'}} 
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      accept="image/*"
+                      style={{display:'none'}}
+                      onChange={handleFileUpload}
                     />
+                    <button
+                      type="button"
+                      className="settings-btn"
+                      onClick={() => fileInputRef.current?.click()}
+                      style={{marginTop: '10px', width: '100%'}}
+                    >
+                      {t.uploadPhoto}
+                    </button>
                 </div>
                 <div className="form-group">
                     <label>{t.username}</label>
@@ -1837,7 +2738,7 @@ function App() {
             {/* Sistem İstatistikleri Paneli */}
             <div style={{marginTop: '25px'}}>
               <h3 className="stats-title">{t.systemStats}</h3>
-              
+
               <div className="profile-stats-grid">
                 <div className="profile-stat-card">
                   <Calendar size={24} color="var(--brand-blue)" />
@@ -1872,14 +2773,14 @@ function App() {
       {/* Aktivite Düzenleme Modalı */}
       <AnimatePresence>
         {editingActivity && (
-          <motion.div 
+          <motion.div
             className="modal-overlay"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             onClick={() => setEditingActivity(null)}
           >
-            <motion.div 
+            <motion.div
               className="modal-content"
               initial={{ scale: 0.8, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
@@ -1888,13 +2789,13 @@ function App() {
             >
               <button className="modal-close" onClick={() => setEditingActivity(null)}><X size={24}/></button>
               <h2 style={{marginTop: 0, marginBottom: '20px'}}>{t.editActivity}</h2>
-              
+
               <form onSubmit={handleSaveActivity} className="edit-form">
                 <div className="form-group">
                     <label>{t.activityName}</label>
                     <input type="text" value={editingActivity.name} onChange={(e) => setEditingActivity({...editingActivity, name: e.target.value})} required />
                 </div>
-                <div style={{display:'flex', gap:'15px'}}>
+                <div className="edit-goal-row">
                   <div className="form-group" style={{flex:1}}>
                       <label>{t.dailyGoal}</label>
                       <input type="number" value={editingActivity.goal} onChange={(e) => setEditingActivity({...editingActivity, goal: parseFloat(e.target.value)})} required />
@@ -1927,8 +2828,8 @@ function App() {
                     </div>
                 </div>
                 <div style={{display: 'flex', gap: '10px', marginTop: '10px'}}>
-                  <button 
-                    type="button" 
+                  <button
+                    type="button"
                     onClick={() => { deleteActivity(editingActivity.id); setEditingActivity(null); }}
                     style={{background: 'rgba(239, 68, 68, 0.1)', color: '#ef4444', border: '1px solid rgba(239, 68, 68, 0.2)', padding: '12px', borderRadius: '12px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center'}}
                   >
@@ -1945,7 +2846,7 @@ function App() {
       {/* Fullscreen Scratchpad */}
       <AnimatePresence>
         {isScratchpadExpanded && (
-          <motion.div 
+          <motion.div
             className="scratchpad-fullscreen"
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
@@ -1961,7 +2862,7 @@ function App() {
                 <Minimize size={24} />
               </button>
             </div>
-            
+
             {isScratchpadPreview ? (
               <div className="scratchpad-fullscreen-preview markdown-body">
                  {scratchpadContent ? (
@@ -1972,6 +2873,7 @@ function App() {
                     <div className="scratchpad-empty-preview">Markdown formatında metin yazarak önizlemeyi görün.</div>
                   )}
                </div>
+              
             ) : (
               <textarea
                 className="scratchpad-fullscreen-textarea"
@@ -1988,14 +2890,14 @@ function App() {
       {/* Şifre Değiştirme Modalı */}
       <AnimatePresence>
         {isPasswordModalOpen && (
-          <motion.div 
+          <motion.div
             className="modal-overlay"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             onClick={() => setIsPasswordModalOpen(false)}
           >
-            <motion.div 
+            <motion.div
               className="modal-content"
               initial={{ scale: 0.8, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
@@ -2004,8 +2906,8 @@ function App() {
             >
               <button className="modal-close" onClick={() => setIsPasswordModalOpen(false)}><X size={24}/></button>
               <h2 style={{marginTop: 0, marginBottom: '20px'}}>{t.changePassword}</h2>
-              
-              {user.providerData[0]?.providerId === 'google.com' ? (
+
+              {isGoogleProvider ? (
                 <div style={{ textAlign: 'center', color: 'var(--text-dim)', padding: '20px' }}>
                   Google ile giriş yaptığınız için şifre değiştirme işlemi kullanılamaz.
                 </div>
