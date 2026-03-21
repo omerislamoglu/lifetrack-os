@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, Suspense, useMemo } from 'react';
-import { ChevronLeft, ChevronRight, X, Sun, Moon, Flame, Lock, Download, Loader, LayoutDashboard, Target, BarChart3, Maximize, Minimize, ArrowUp, ArrowDown, Check, Trash2, Plus, Trophy, Settings, Bell, BellOff, Languages, Sparkles, Calendar, Clock, Activity, CheckCircle, StickyNote, Edit, Eye, VolumeX, Trash, ShieldAlert, CloudRain, Coffee, TreePine, ListTodo, Music, BookOpen, Brain, Wind, Crown } from 'lucide-react';
+import { ChevronLeft, ChevronRight, X, Sun, Moon, Flame, Lock, Download, Loader, LayoutDashboard, Target, BarChart3, Maximize, Minimize, ArrowUp, ArrowDown, Check, Trash2, Plus, Trophy, Settings, Bell, BellOff, Languages, Sparkles, Calendar, Clock, Activity, CheckCircle, StickyNote, Edit, Eye, VolumeX, Trash, ShieldAlert, CloudRain, Coffee, TreePine, ListTodo, Music, BookOpen, Brain, Wind, Crown, AlertCircle } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ResponsiveContainer, AreaChart, Area, BarChart, Bar, PieChart, Pie, Cell, Tooltip as RechartsTooltip, CartesianGrid, XAxis, YAxis } from 'recharts';
 import jsPDF from 'jspdf';
@@ -1738,8 +1738,8 @@ function App() {
       <p style={{ margin: 0, maxWidth: '460px', color: 'var(--text-dim)', lineHeight: 1.7 }}>
         {message}
       </p>
-      <button className="pro-feature-button premium-glow" onClick={handlePremiumCtaClick} disabled={activePurchaseId || isPremiumCtaLoading}>
-        {isPremiumCtaLoading ? '⏳...' : t.proUpgrade}
+      <button className="pro-feature-button premium-glow" onClick={() => setIsPremiumModalOpen(true)}>
+        {t.proUpgrade}
       </button>
     </motion.div>
   );
@@ -2924,6 +2924,202 @@ function App() {
                   <button type="submit" className="add-btn" style={{width: '100%', marginTop: '10px'}}>{t.save}</button>
                 </form>
               )}
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Premium Modal */}
+      <AnimatePresence>
+        {isPremiumModalOpen && (
+          <motion.div
+            className="modal-overlay"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={() => setIsPremiumModalOpen(false)}
+          >
+            <motion.div
+              className="modal-content premium-modal"
+              initial={{ scale: 0.8, opacity: 0, y: 20 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={{ scale: 0.8, opacity: 0, y: 20 }}
+              onClick={(e) => e.stopPropagation()}
+              style={{ maxWidth: '500px' }}
+            >
+              <button className="modal-close" onClick={() => setIsPremiumModalOpen(false)}><X size={24}/></button>
+
+              {/* Premium Error Alert */}
+              {premiumError && (
+                <motion.div
+                  initial={{ opacity: 0, y: -10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="premium-alert"
+                  style={{
+                    background: 'rgba(239, 68, 68, 0.1)',
+                    border: '1px solid rgba(239, 68, 68, 0.3)',
+                    borderRadius: '8px',
+                    padding: '12px 16px',
+                    marginBottom: '20px',
+                    color: '#ef4444',
+                    fontSize: '0.9rem',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '10px'
+                  }}
+                >
+                  <AlertCircle size={20} />
+                  {premiumError}
+                </motion.div>
+              )}
+
+              {/* Header */}
+              <div style={{ textAlign: 'center', marginBottom: '24px' }}>
+                <div style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  marginBottom: '12px'
+                }}>
+                  <Crown size={28} style={{ color: '#FF8C00' }} />
+                  <h2 style={{
+                    margin: 0,
+                    fontSize: '1.8rem',
+                    background: 'linear-gradient(135deg, #FF8C00, #f59e0b)',
+                    WebkitBackgroundClip: 'text',
+                    WebkitTextFillColor: 'transparent',
+                    fontWeight: 700
+                  }}>
+                    LifeTrack PRO
+                  </h2>
+                </div>
+                <p style={{
+                  margin: '8px 0 0 0',
+                  color: 'var(--text-dim)',
+                  fontSize: '0.95rem',
+                  lineHeight: 1.6
+                }}>
+                  Yeteneğini açığa çıkar ve başarını maksimize et.
+                </p>
+              </div>
+
+              {/* Features */}
+              <div style={{
+                background: 'rgba(255, 140, 0, 0.05)',
+                border: '1px solid rgba(255, 140, 0, 0.15)',
+                borderRadius: '12px',
+                padding: '16px',
+                marginBottom: '24px'
+              }}>
+                <h3 style={{
+                  margin: '0 0 16px 0',
+                  color: '#FF8C00',
+                  fontSize: '0.95rem',
+                  fontWeight: 600,
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.5px'
+                }}>
+                  PRO Özellikleri
+                </h3>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                  {[
+                    'Haftalık Detaylı Analiz Raporu',
+                    'Arka Plan LoFi ve Doğa Sesleri',
+                    'AI Mentor Koçluğu',
+                    'Sınırsız PDF Dışa Aktarma',
+                    'Özel Raporlar ve İçgörüler'
+                  ].map((feature, idx) => (
+                    <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                      <CheckCircle size={18} style={{ color: '#10b981', flexShrink: 0 }} />
+                      <span style={{ color: 'var(--text-main)', fontSize: '0.9rem' }}>
+                        {feature}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Pricing */}
+              <div style={{
+                background: 'rgba(31, 41, 55, 0.4)',
+                border: '1px solid rgba(255, 140, 0, 0.2)',
+                borderRadius: '12px',
+                padding: '16px',
+                marginBottom: '20px',
+                textAlign: 'center'
+              }}>
+                <div style={{ color: 'var(--text-dim)', fontSize: '0.85rem', marginBottom: '8px' }}>
+                  Aylık Abonelik
+                </div>
+                <div style={{
+                  fontSize: '2rem',
+                  fontWeight: 700,
+                  color: '#FF8C00',
+                  marginBottom: '4px'
+                }}>
+                  ₺49.99
+                </div>
+                <div style={{ color: 'var(--text-dim)', fontSize: '0.8rem' }}>
+                  / ay
+                </div>
+              </div>
+
+              {/* Action Buttons */}
+              <motion.button
+                onClick={handlePremiumCtaClick}
+                disabled={activePurchaseId || isPremiumCtaLoading}
+                whileHover={{ scale: 1.02 }}
+                whileTap={{ scale: 0.98 }}
+                style={{
+                  width: '100%',
+                  padding: '14px 20px',
+                  background: 'linear-gradient(135deg, #FF8C00, #f59e0b)',
+                  color: '#fff',
+                  border: 'none',
+                  borderRadius: '10px',
+                  fontSize: '1rem',
+                  fontWeight: 600,
+                  cursor: activePurchaseId || isPremiumCtaLoading ? 'not-allowed' : 'pointer',
+                  opacity: activePurchaseId || isPremiumCtaLoading ? 0.7 : 1,
+                  marginBottom: '12px',
+                  boxShadow: '0 4px 15px rgba(255, 140, 0, 0.3)',
+                  transition: 'all 0.3s ease'
+                }}
+                className="premium-upgrade-btn"
+              >
+                {isPremiumCtaLoading ? '⏳ İşleniyor...' : 'Hemen Yükselt'}
+              </motion.button>
+
+              <motion.button
+                onClick={() => setIsPremiumModalOpen(false)}
+                whileHover={{ scale: 1.02 }}
+                whileTap={{ scale: 0.98 }}
+                style={{
+                  width: '100%',
+                  padding: '12px 20px',
+                  background: 'transparent',
+                  color: 'var(--text-main)',
+                  border: '1px solid rgba(255, 255, 255, 0.1)',
+                  borderRadius: '10px',
+                  fontSize: '0.95rem',
+                  fontWeight: 500,
+                  cursor: 'pointer',
+                  transition: 'all 0.3s ease'
+                }}
+              >
+                Şimdi Değil
+              </motion.button>
+
+              {/* Cancel Info */}
+              <p style={{
+                textAlign: 'center',
+                color: 'var(--text-dim)',
+                fontSize: '0.8rem',
+                marginTop: '16px',
+                marginBottom: 0
+              }}>
+                İstediğin zaman tek tıkla iptal edebilirsin. Gizlilik Politikası ve Kullanım Koşulları kabul ediyor musun?
+              </p>
             </motion.div>
           </motion.div>
         )}
