@@ -561,7 +561,11 @@ function App() {
               setTodos(data.todos || []);
               setDailyGoals(data.dailyGoals || {});
               setScratchpadContent(data.scratchpadContent || '');
-              // RevenueCat'ten gelen Premium değerini koru
+              // Firestore'dan kaydedilmiş premium durumunu restore et
+              if (data.isPremiumUser === true) {
+                setIsPremiumUser(true);
+                console.log('✅ Firestore\'dan Pro durumu yüklendi');
+              }
             } else {
               console.log("Firestore'da kaydı bulunamadı, default veriler yükleniyor...");
               setHistoryData({ [formatDate(new Date())]: defaultActivities });
@@ -1309,6 +1313,16 @@ function App() {
         alert('✅ SATINALMA BAŞARILI - PREMIUM AKTIF!');
         console.log('✅ Premium Entitlement Algılandı:', customerInfo.entitlements.active);
         setIsPremiumUser(true);
+
+        // Firestore'a isPremiumUser'ı kaydet
+        try {
+          const userDocRef = doc(db, 'users', user.uid);
+          await setDoc(userDocRef, { isPremiumUser: true }, { merge: true });
+          console.log('✅ Premium status Firestore\'a kaydedildi');
+        } catch (firestoreError) {
+          console.error('⚠️ Firestore kayıt hatası:', firestoreError?.message);
+        }
+
         setIsPremiumModalOpen(false);
         await syncPremiumState(false);
       } else {
@@ -3041,25 +3055,26 @@ function App() {
 
               {/* Pricing */}
               <div style={{
-                background: 'rgba(31, 41, 55, 0.4)',
-                border: '1px solid rgba(255, 140, 0, 0.2)',
+                background: 'linear-gradient(135deg, rgba(255, 140, 0, 0.15), rgba(255, 140, 0, 0.08))',
+                border: '2px solid rgba(255, 140, 0, 0.3)',
                 borderRadius: '12px',
-                padding: '16px',
+                padding: '28px 20px',
                 marginBottom: '20px',
                 textAlign: 'center'
               }}>
-                <div style={{ color: 'var(--text-dim)', fontSize: '0.85rem', marginBottom: '8px' }}>
+                <div style={{ color: 'var(--text-dim)', fontSize: '0.9rem', marginBottom: '12px', fontWeight: 500 }}>
                   Aylık Abonelik
                 </div>
                 <div style={{
-                  fontSize: '2rem',
+                  fontSize: '2.8rem',
                   fontWeight: 700,
                   color: '#FF8C00',
-                  marginBottom: '4px'
+                  marginBottom: '6px',
+                  letterSpacing: '-1px'
                 }}>
                   ₺49.99
                 </div>
-                <div style={{ color: 'var(--text-dim)', fontSize: '0.8rem' }}>
+                <div style={{ color: 'var(--text-dim)', fontSize: '0.9rem', marginBottom: '16px' }}>
                   / ay
                 </div>
               </div>
