@@ -40,4 +40,4 @@ const AnalyticsChart = ({ data, chartColor }) => {
   );
 };
 
-export default AnalyticsChart;
+export default React.memo(AnalyticsChart);

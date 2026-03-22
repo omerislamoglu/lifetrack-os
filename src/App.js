@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, Suspense, useMemo } from 'react';
-import { ChevronLeft, ChevronRight, X, Sun, Moon, Flame, Lock, Download, Loader, LayoutDashboard, Target, BarChart3, Maximize, Minimize, ArrowUp, ArrowDown, Check, Trash2, Plus, Trophy, Settings, Bell, BellOff, Languages, Sparkles, Calendar, Clock, Activity, CheckCircle, StickyNote, Edit, Eye, VolumeX, Trash, ShieldAlert, CloudRain, Coffee, TreePine, ListTodo, Music, BookOpen, Brain, Wind, Crown, AlertCircle } from 'lucide-react';
+import { ChevronLeft, ChevronRight, X, Sun, Moon, Flame, Lock, Download, Loader, LayoutDashboard, Target, BarChart3, Maximize, Minimize, ArrowUp, ArrowDown, Check, Trash2, Plus, Trophy, Settings, Bell, BellOff, Languages, Sparkles, Calendar, Clock, Activity, CheckCircle, StickyNote, Edit, Eye, VolumeX, Trash, ShieldAlert, CloudRain, Coffee, TreePine, ListTodo, Music, BookOpen, Brain, Wind, Crown, AlertCircle, LogOut } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ResponsiveContainer, AreaChart, Area, BarChart, Bar, PieChart, Pie, Cell, Tooltip as RechartsTooltip, CartesianGrid, XAxis, YAxis } from 'recharts';
 import jsPDF from 'jspdf';
@@ -70,20 +70,25 @@ const SafeChartContainer = ({ height = 200, minHeight = 1, children, debounce = 
     const updateReadyState = () => {
       const element = containerRef.current;
       const hasValidSize = Boolean(element && element.clientWidth > 10 && element.clientHeight > 10);
-      setIsReady(hasValidSize);
+      setIsReady(prev => prev !== hasValidSize ? hasValidSize : prev);
     };
 
     updateReadyState();
 
     let observer;
+    let frameId;
     if (typeof ResizeObserver !== 'undefined' && containerRef.current) {
-      observer = new ResizeObserver(updateReadyState);
+      observer = new ResizeObserver(() => {
+        if (frameId) cancelAnimationFrame(frameId);
+        frameId = requestAnimationFrame(updateReadyState);
+      });
       observer.observe(containerRef.current);
     }
 
-    window.addEventListener('resize', updateReadyState);
+    window.addEventListener('resize', updateReadyState, { passive: true });
 
     return () => {
+      if (frameId) cancelAnimationFrame(frameId);
       if (observer) observer.disconnect();
       window.removeEventListener('resize', updateReadyState);
     };
@@ -101,7 +106,7 @@ const SafeChartContainer = ({ height = 200, minHeight = 1, children, debounce = 
 };
 
 // Mini Trend Chart Component
-const MiniTrendChart = ({ data, color }) => (
+const MiniTrendChart = React.memo(({ data, color }) => (
   <SafeChartContainer height={40} minHeight={40} debounce={60}>
       <AreaChart data={data} margin={{ top: 5, right: 5, left: -25, bottom: 5 }}>
         <defs>
@@ -113,7 +118,7 @@ const MiniTrendChart = ({ data, color }) => (
         <Area type="monotone" dataKey="value" stroke={lightenColor(color, 10)} fill={`url(#miniGrad-${color})`} isAnimationActive={false} />
       </AreaChart>
   </SafeChartContainer>
-);
+));
 
 const translations = {
   tr: {
@@ -223,7 +228,8 @@ const translations = {
     premiumStoreUnavailable: 'Su anda magaza paketleri yuklenemedi. Tekrar deneyin.',
     goalBuilderTitle: 'Hedeflerini olustur',
     goalBuilderDescription: 'Dashboard kartlarini gunluk ve haftalik hedeflerle aninda sekillendir.',
-    backToToday: 'Bugune Don'
+    backToToday: 'Bugune Don',
+    confirmLogout: 'Çıkış yapmak istediğinize emin misiniz?'
   },
   en: {
     dashboard: 'Dashboard',
@@ -332,7 +338,8 @@ const translations = {
     premiumStoreUnavailable: 'Store packages could not be loaded right now. Please try again.',
     goalBuilderTitle: 'Build your goals',
     goalBuilderDescription: 'Shape your dashboard cards instantly with daily and weekly targets.',
-    backToToday: 'Back To Today'
+    backToToday: 'Back To Today',
+    confirmLogout: 'Are you sure you want to log out?'
   }
 };
 
@@ -396,7 +403,7 @@ function App() {
 
   // PRO Kilidi State'leri
   // FORCE PRO - Premium state'i herzaman true
-  const [isPremiumUser, setIsPremiumUser] = useState(true);
+  const [isPremiumUser, setIsPremiumUser] = useState(false); // Default to false
   const [isPremiumModalOpen, setIsPremiumModalOpen] = useState(false);
   const [premiumPackages, setPremiumPackages] = useState([]);
   const [isPremiumLoading, setIsPremiumLoading] = useState(false);
@@ -459,6 +466,8 @@ function App() {
   const isPremiumPaywallReady = isPremiumSupported && hasRevenueCatKey();
   const isGoogleProvider = Array.isArray(user?.providerData)
     && user.providerData.some((provider) => provider?.providerId === 'google.com');
+  const isAppleProvider = Array.isArray(user?.providerData)
+    && user.providerData.some((provider) => provider?.providerId === 'apple.com');
 
   useEffect(() => {
     if (!user) {
@@ -522,34 +531,7 @@ function App() {
         if (currentUser) {
           setUser(currentUser);
           setIsCloudSyncEnabled(true);
-          hasShownCloudSyncWarningRef.current = false;
-
-          // Açılışta Premium Statusu Kontrol Et (Garantili)
-          try {
-            // Motor hazır mı kontrol et
-            const configStatus = await Purchases.isConfigured();
-            if (!configStatus.isConfigured) {
-              await Purchases.configure({ apiKey: 'appl_LSMObGgWoJiskSarRbWUkBbNJOw' });
-            }
-
-            // Artık motor hazır, customer bilgisini çek
-            const customerInfo = await Purchases.getCustomerInfo();
-
-            // LOGDAKİ YAPIYA GÖRE KESİN KONTROL:
-            const isPro = customerInfo.entitlements.active['Premium']?.isActive === true ||
-                          customerInfo.entitlements.active['pro_features']?.isActive === true;
-
-            if (isPro) {
-              console.log('✅ PRO ONAYLANDI: Kilitler açılıyor...', customerInfo.entitlements.active);
-              setIsPremiumUser(true);
-            } else {
-              console.log('❌ PRO BULUNAMADI: Kullanıcı ücretsiz modda.', customerInfo.entitlements.active);
-              setIsPremiumUser(false);
-            }
-          } catch (premiumError) {
-            console.error('⚠️ Premium kontrol hatası:', premiumError?.message || premiumError);
-            setIsPremiumUser(false);
-          }
+          hasShownCloudSyncWarningRef.current = false; // Reset warning flag on new login
 
           const userDocRef = doc(db, 'users', currentUser.uid);
           try {
@@ -561,11 +543,9 @@ function App() {
               setTodos(data.todos || []);
               setDailyGoals(data.dailyGoals || {});
               setScratchpadContent(data.scratchpadContent || '');
-              // Firestore'dan kaydedilmiş premium durumunu restore et
-              if (data.isPremiumUser === true) {
-                setIsPremiumUser(true);
-                console.log('✅ Firestore\'dan Pro durumu yüklendi');
-              }
+              // Initialize isPremiumUser from Firestore first
+              setIsPremiumUser(data.isPremiumUser === true);
+              console.log('✅ Firestore\'dan isPremiumUser durumu yüklendi:', data.isPremiumUser);
             } else {
               console.log("Firestore'da kaydı bulunamadı, default veriler yükleniyor...");
               setHistoryData({ [formatDate(new Date())]: defaultActivities });
@@ -573,6 +553,7 @@ function App() {
               setTodos([]);
               setDailyGoals({});
               setScratchpadContent('');
+              setIsPremiumUser(false); // Default to false if no Firestore data
             }
           } catch (firestoreError) {
             if (firestoreError?.code === 'permission-denied') {
@@ -591,6 +572,21 @@ function App() {
             setDailyGoals({});
             setScratchpadContent('');
           }
+
+          // RevenueCat Premium Sync
+          try {
+            await Purchases.logIn({ appUserID: currentUser.uid });
+            const { customerInfo } = await Purchases.getCustomerInfo();
+            const isPro = customerInfo?.entitlements?.active['Premium']?.isActive === true ||
+                          customerInfo?.entitlements?.active['pro_features']?.isActive === true;
+            
+            if (isPro) {
+              setIsPremiumUser(true);
+              localStorage.setItem('isPremiumUser', 'true');
+            }
+          } catch (rcError) {
+            console.error("RevenueCat sync error:", rcError);
+          }
         } else {
           console.log("Kullanıcı giriş yapmamış");
           setUser(null);
@@ -598,8 +594,13 @@ function App() {
           setMoods({});
           setTodos([]);
           setDailyGoals({});
-          setScratchpadContent('');
           setIsPremiumUser(false);
+          localStorage.removeItem('isPremiumUser');
+          try {
+            await Purchases.logOut();
+          } catch (rcError) {
+            console.error("RevenueCat logout error:", rcError);
+          }
         }
       } catch (error) {
         console.error("Auth listener hatası:", error);
@@ -618,7 +619,7 @@ function App() {
       unsubscribe();
       clearTimeout(timeout);
     };
-  }, []);
+  }, []); // Removed isPremiumUser from dependencies to avoid infinite loop
 
   // Capacitor Splash Screen Hide
   useEffect(() => {
@@ -819,21 +820,33 @@ function App() {
 
   // Idle detection for screen saver
   useEffect(() => {
+    let throttleTimer;
     const handleActivity = () => {
       if (isIdle) setIsIdle(false);
-      clearTimeout(idleTimer.current);
-      idleTimer.current = setTimeout(() => {
-        if (!isActive) setIsIdle(true);
-      }, 180000);
+      
+      if (!throttleTimer) {
+        throttleTimer = setTimeout(() => {
+          throttleTimer = null;
+          clearTimeout(idleTimer.current);
+          idleTimer.current = setTimeout(() => {
+            if (!isActive) setIsIdle(true);
+          }, 180000);
+        }, 1000);
+      }
     };
 
     const events = ['mousemove', 'keydown', 'click', 'scroll', 'touchstart'];
-    events.forEach(event => window.addEventListener(event, handleActivity));
-    handleActivity();
+    events.forEach(event => window.addEventListener(event, handleActivity, { passive: true }));
+    
+    clearTimeout(idleTimer.current);
+    idleTimer.current = setTimeout(() => {
+      if (!isActive) setIsIdle(true);
+    }, 180000);
 
     return () => {
       events.forEach(event => window.removeEventListener(event, handleActivity));
       clearTimeout(idleTimer.current);
+      if (throttleTimer) clearTimeout(throttleTimer);
     };
   }, [isIdle, isActive]);
 
@@ -1603,7 +1616,7 @@ function App() {
     return { memberSince, totalHours, completedTasks };
   }, [user, historyData, language, todos]);
 
-  const handleScroll = () => {
+  const handleGridScroll = () => {
     if (gridRef.current) {
         clearTimeout(scrollTimeout.current);
         scrollTimeout.current = setTimeout(() => {
@@ -1612,9 +1625,11 @@ function App() {
                 const gap = 15;
                 const scrollLeft = gridRef.current.scrollLeft;
                 const index = Math.round(scrollLeft / (cardWidth + gap));
-                setActiveCardIndex(index);
+                if (activeCardIndex !== index) {
+                    setActiveCardIndex(index);
+                }
             }
-        }, 150);
+        }, 100);
     }
   };
 
@@ -1738,7 +1753,7 @@ function App() {
   const renderPremiumSpotlight = (title, message) => (
     <motion.div
       className="pro-feature-card premium-glow-frame"
-      initial={{ opacity: 0, y: 14 }}
+      initial={{ opacity: 0, y: 14 }} // Added premium-glow-frame class
       animate={{ opacity: 1, y: 0 }}
       style={{ marginBottom: '20px' }}
     >
@@ -1763,6 +1778,44 @@ function App() {
     value: Math.max(1, Math.abs(item.change)),
     color: item.color
   })) || [];
+
+  // Analytics tab'ındaki ağır bileşenlerin saniye başı render olmaması için memoize ediyoruz
+  const memoizedPieChart = useMemo(() => (
+    <SafeChartContainer height="100%" minHeight={300} debounce={80}>
+      <PieChart>
+        <Pie data={pieData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={80} innerRadius={50} paddingAngle={4}>
+          {pieData.map((entry, index) => (
+            <Cell key={`cell-${index}`} fill={entry.color} />
+          ))}
+        </Pie>
+        <RechartsTooltip cursor={false} formatter={(value) => [`${value}%`, language === 'tr' ? 'Pay' : 'Share']} contentStyle={{backgroundColor: 'var(--card-bg)', border: '1px solid var(--border-color)', borderRadius: '8px'}} />
+      </PieChart>
+    </SafeChartContainer>
+  ), [pieData, language]);
+
+  const memoizedBarChart = useMemo(() => (
+    <SafeChartContainer height="100%" minHeight={300} debounce={80}>
+      <BarChart
+        data={analysisData.weeklyTrend.slice(-3).filter((item) => (item.score || 0) > 0).map((item) => ({
+          day: item.day,
+          score: item.score,
+        }))}
+        margin={{ top: 10, right: 10, left: -20, bottom: 20 }}
+      >
+        <defs>
+          <linearGradient id="colorUv" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="#ff8000" stopOpacity={1}/>
+            <stop offset="100%" stopColor="#ffd000" stopOpacity={1}/>
+          </linearGradient>
+        </defs>
+        <CartesianGrid vertical={false} stroke="transparent" />
+        <XAxis dataKey="day" stroke="var(--text-dim)" style={{ fontSize: '0.85rem' }} />
+        <YAxis stroke="var(--text-dim)" style={{ fontSize: '0.85rem' }} domain={[0, 100]} />
+        <Bar dataKey="score" fill="url(#colorUv)" radius={[12, 12, 0, 0]} isAnimationActive={true} />
+        <RechartsTooltip cursor={false} contentStyle={{backgroundColor: 'var(--card-bg)', border: '1px solid var(--border-color)', borderRadius: '8px', color: 'var(--text-main)'}}/>
+      </BarChart>
+    </SafeChartContainer>
+  ), [analysisData.weeklyTrend]);
 
   const renderAiMentorCard = () => (
     <motion.div className="ai-mentor-card" style={{
@@ -2175,7 +2228,7 @@ function App() {
               </div>
             </motion.div>
 
-            <div className="grid" ref={gridRef} onScroll={handleScroll}>
+            <div className="grid" ref={gridRef} onScroll={handleGridScroll}>
               <AnimatePresence mode='popLayout'>
               {currentActivities.map((act, index) => {
                 const prog = Math.min((act.value / (act.goal || 1)) * 100, 100);
@@ -2494,29 +2547,11 @@ function App() {
             {isPremiumUser ? (
               <div className="premium-report-card" ref={reportCardRef} style={{ marginBottom: '20px', padding: '20px', borderRadius: '16px', background: 'linear-gradient(145deg, rgba(251, 191, 36, 0.14) 0%, rgba(249, 115, 22, 0.08) 42%, rgba(30, 41, 59, 0.18) 100%)', border: '1px solid rgba(251, 191, 36, 0.42)', backdropFilter: 'blur(10px)', boxShadow: '0 8px 32px rgba(251, 191, 36, 0.22)' }}>
                 <div className="insight-card-header" style={{ marginBottom: '16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                  <h3 style={{ display: 'flex', alignItems: 'center', gap: '8px', margin: 0, color: '#fbbf24', fontSize: '1.1rem' }}><Crown size={20} color="#fbbf24"/> {t.monthlyReport}</h3>
+                  <h3 style={{ display: 'flex', alignItems: 'center', gap: '8px', margin: 0, color: '#fbbf24', fontSize: '1.1rem' }}><Crown size={20} color="#fbbf24"/> Haftalık Analiz Raporu</h3>
                 </div>
 
                 <div style={{ height: 300, marginBottom: '16px' }}>
-                  <SafeChartContainer height="100%" minHeight={300} debounce={80}>
-                    <PieChart>
-                      <Pie
-                        data={pieData}
-                        dataKey="value"
-                        nameKey="name"
-                        cx="50%"
-                        cy="50%"
-                        outerRadius={80}
-                        innerRadius={50}
-                        paddingAngle={4}
-                      >
-                        {pieData.map((entry, index) => (
-                          <Cell key={`cell-${index}`} fill={entry.color} />
-                        ))}
-                      </Pie>
-                      <RechartsTooltip cursor={false} formatter={(value) => [`${value}%`, language === 'tr' ? 'Pay' : 'Share']} contentStyle={{backgroundColor: 'var(--card-bg)', border: '1px solid var(--border-color)', borderRadius: '8px'}} />
-                    </PieChart>
-                  </SafeChartContainer>
+                  {memoizedPieChart}
                 </div>
 
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', paddingTop: '12px', borderTop: '1px solid rgba(251, 191, 36, 0.2)' }}>
@@ -2539,32 +2574,13 @@ function App() {
                 </div>
               </div>
             ) : (
-              renderPremiumSpotlight(t.monthlyReport, t.proLockedMessage)
+              renderPremiumSpotlight('Haftalık Analiz Raporu', t.proLockedMessage)
             )}
 
             <div className="chart-card" style={{ marginBottom: '20px' }}>
               <h3 style={{ margin: '0 0 16px 0', fontSize: '1.2rem' }}>{t.threeDayReport}</h3>
               <div style={{ width: '100%', height: 300 }}>
-                <SafeChartContainer height="100%" minHeight={300} debounce={80}>
-                  <BarChart
-                    data={analysisData.weeklyTrend.slice(-3).filter((item) => (item.score || 0) > 0).map((item) => ({
-                      day: item.day,
-                      score: item.score,
-                    }))}
-                    margin={{ top: 10, right: 10, left: -20, bottom: 20 }}
-                  >
-                    <CartesianGrid vertical={false} stroke="transparent" />
-                    <XAxis dataKey="day" stroke="var(--text-dim)" style={{ fontSize: '0.85rem' }} />
-                    <YAxis stroke="var(--text-dim)" style={{ fontSize: '0.85rem' }} domain={[0, 100]} />
-                    <Bar
-                      dataKey="score"
-                      fill={chartColor}
-                      radius={[8, 8, 0, 0]}
-                      isAnimationActive={true}
-                    />
-                    <RechartsTooltip cursor={false} contentStyle={{backgroundColor: 'var(--card-bg)', border: '1px solid var(--border-color)', borderRadius: '8px', color: 'var(--text-main)'}}/>
-                  </BarChart>
-                </SafeChartContainer>
+                {memoizedBarChart}
               </div>
             </div>
 
@@ -2649,8 +2665,8 @@ function App() {
                   <Lock size={24} color="#8b5cf6" />
                   <span>{t.changePassword}</span>
                 </button>
-                <button onClick={() => signOut(auth)} className="settings-btn" style={{ background: 'rgba(239, 68, 68, 0.1)', color: '#ef4444', borderColor: 'rgba(239, 68, 68, 0.3)' }}>
-                  <X size={24} />
+              <button onClick={() => { if(window.confirm(t.confirmLogout)) signOut(auth); }} className="settings-btn" style={{ background: 'rgba(239, 68, 68, 0.1)', color: '#ef4444', borderColor: 'rgba(239, 68, 68, 0.3)' }}>
+                <LogOut size={24} />
                   <span>{t.logout}</span>
                 </button>
               </div>
@@ -2700,47 +2716,49 @@ function App() {
               onClick={(e) => e.stopPropagation()}
             >
               <button className="modal-close" onClick={() => setIsProfileModalOpen(false)}><X size={24}/></button>
-              <h2 style={{marginTop: 0, marginBottom: '20px'}}>{t.editProfile}</h2>
+              <h2 style={{marginTop: 0, marginBottom: '5px'}}>{t.editProfile}</h2>
 
               <form onSubmit={handleUpdateProfile} className="edit-form">
-                <div className="form-group">
-                    <label>{t.chooseAvatar}</label>
-                    <div className="avatar-grid">
+                <div className="form-group" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                    <label style={{ alignSelf: 'flex-start' }}>{t.chooseAvatar}</label>
+                    <div
+                      style={{
+                        width: '90px',
+                        height: '90px',
+                        borderRadius: '50%',
+                        border: '3px solid var(--brand-blue)',
+                        backgroundImage: `url(${selectedAvatar || user?.photoURL || avatarOptionsList[0]})`,
+                        backgroundSize: 'cover',
+                        backgroundPosition: 'center',
+                        marginBottom: '15px',
+                        boxShadow: '0 4px 12px rgba(0, 0, 0, 0.2)'
+                      }}
+                    />
+                    <div className="avatar-grid" style={{ justifyContent: 'center', gap: '10px' }}>
                       {avatarOptions.map((avatar, i) => (
-                        <button
+                        <motion.button
                           type="button"
                           key={i}
+                          whileHover={{ scale: 1.15 }}
+                          whileTap={{ scale: 0.95 }}
                           className={`avatar-option ${selectedAvatar === avatar ? 'selected' : ''}`}
                           onClick={() => setSelectedAvatar(avatar)}
                           style={{
-                            width: '60px',
-                            height: '60px',
+                            width: '45px',
+                            height: '45px',
                             borderRadius: '50%',
-                            border: selectedAvatar === avatar ? '3px solid var(--brand-blue)' : '2px solid var(--border-color)',
+                            border: selectedAvatar === avatar ? '2px solid var(--brand-blue)' : '2px solid transparent',
                             padding: 0,
                             cursor: 'pointer',
                             backgroundImage: `url(${avatar})`,
                             backgroundSize: 'cover',
-                            backgroundPosition: 'center'
+                            backgroundPosition: 'center',
+                            opacity: selectedAvatar === avatar ? 1 : 0.5,
+                            transition: 'all 0.2s ease'
                           }}
                         />
                       ))}
                     </div>
-                    <input
-                      ref={fileInputRef}
-                      type="file"
-                      accept="image/*"
-                      style={{display:'none'}}
-                      onChange={handleFileUpload}
-                    />
-                    <button
-                      type="button"
-                      className="settings-btn"
-                      onClick={() => fileInputRef.current?.click()}
-                      style={{marginTop: '10px', width: '100%'}}
-                    >
-                      {t.uploadPhoto}
-                    </button>
                 </div>
                 <div className="form-group">
                     <label>{t.username}</label>

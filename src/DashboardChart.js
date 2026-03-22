@@ -128,4 +128,4 @@ const DashboardChart = ({ data, isPremium }) => {
   );
 };
 
-export default DashboardChart;
+export default React.memo(DashboardChart);
