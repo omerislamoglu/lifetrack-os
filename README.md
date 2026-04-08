@@ -1,36 +1,28 @@
-🚀 LifeTrack OS
-LifeTrack OS, kullanıcıların günlük odak noktalarını belirlemesine, zamanlarını yönetmesine ve kişisel gelişim süreçlerini yapay zeka desteğiyle takip etmesine olanak tanıyan, profesyonel standartlarda geliştirilmiş bir iOS uygulamasıdır.
+# 🚀 LifeTrack OS
 
-✨ Özellikler
-Günlük Odaklanma & Mood Takibi: Kullanıcının ruh halini ve günlük hedeflerini kayıt altına alması.
+**LifeTrack OS**, kullanıcıların günlük odak noktalarını belirlemesine, zamanlarını yönetmesine ve kişisel gelişim süreçlerini yapay zeka desteğiyle takip etmesine olanak tanıyan bir iOS uygulamasıdır.
 
-Zaman Yönetimi (Pomodoro): Verimli çalışma sürelerini yönetmek için entegre sayaç.
+## ✨ Özellikler
 
-AI Mentor: Kullanıcı verilerine dayalı, yapay zeka destekli kişisel gelişim tavsiyeleri.
+- **Günlük Odaklanma & Mood Takibi:** Ruh halini ve günlük hedefleri kayıt altına alma.
+- **Zaman Yönetimi (Pomodoro):** Verimli çalışma için entegre sayaç.
+- **AI Mentor:** Yapay zeka destekli kişisel tavsiyeler.
+- **İlerleme Analizi:** Recharts ile görselleştirilmiş performans grafikleri.
+- **Premium Üyelik (IAP):** RevenueCat ile abonelik yönetimi.
+- **App Store Uyumluluğu:** Apple standartlarına uygun hesap silme ve yasal linkler.
 
-İlerleme Analizi: Recharts altyapısı ile görselleştirilmiş haftalık ve aylık performans grafikleri.
+## 🛠 Kullanılan Teknolojiler
 
-Premium Üyelik (IAP): Abonelik tabanlı özellik erişimi ve güvenli ödeme yönetimi.
+- **Frontend:** React.js, CSS3
+- **Mobil Framework:** Capacitor (Native iOS Bridge)
+- **Backend:** Firebase (Auth & Firestore)
+- **Ödeme Altyapısı:** RevenueCat SDK
+- **Veri Görselleştirme:** Recharts
+- **Yayınlama:** Xcode, App Store Connect
 
-App Store Uyumluluğu: Apple standartlarına uygun hesap silme, gizlilik politikası ve kullanım koşulları entegrasyonu.
+## 📦 Kurulum ve Çalıştırma
 
-🛠 Kullanılan Teknolojiler
-Frontend: React.js, CSS3 (Modern UI/UX Design)
-
-Mobil Framework: Capacitor (Native iOS Bridge)
-
-Backend & Veritabanı: Firebase (Authentication & Firestore)
-
-Ödeme & Abonelik: RevenueCat SDK (In-App Purchases)
-
-Veri Görselleştirme: Recharts / Chart.js
-
-Yayınlama Süreci: Xcode, App Store Connect
-
-📦 Kurulum ve Çalıştırma
-Projeyi yerel ortamınızda ayağa kaldırmak için:
-
-Bash
+```bash
 # Projeyi klonlayın
 git clone https://github.com/omerislamoglu/lifetrack-os.git
 
@@ -40,23 +32,5 @@ npm install
 # Web uygulamasını başlatın
 npm start
 
-# Değişiklikleri iOS projesine aktarın
-npx cap copy ios
+# iOS tarafına aktarın
 npx cap sync ios
-
-# Xcode'u açın
-npx cap open ios
-🔐 Güvenlik ve Uyumluluk (Compliance)
-Bu uygulama, Apple App Store inceleme süreçlerinden başarıyla geçecek şekilde optimize edilmiştir:
-
-HTTPS: Tüm yasal dökümantasyon (Privacy Policy, EULA) güvenli bağlantılar üzerinden sunulmaktadır.
-
-Data Privacy: Kullanıcıların hesaplarını ve verilerini uygulama içerisinden kalıcı olarak silme hakkı (Account Deletion) mevcuttur.
-
-🔗 İletişim & Portfolyo
-
-App Store: Çok yakında.
-
-LinkedIn: Muhammed Ömer İslamoğlu
-
-E-posta: omeris343212@gmail.com
