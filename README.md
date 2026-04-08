@@ -54,6 +54,7 @@ HTTPS: Tüm yasal dökümantasyon (Privacy Policy, EULA) güvenli bağlantılar 
 Data Privacy: Kullanıcıların hesaplarını ve verilerini uygulama içerisinden kalıcı olarak silme hakkı (Account Deletion) mevcuttur.
 
 🔗 İletişim & Portfolyo
+
 App Store: Çok yakında.
 
 LinkedIn: Muhammed Ömer İslamoğlu
