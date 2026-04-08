@@ -1,38 +1,53 @@
 import UIKit
 import Capacitor
 import FirebaseCore
-import WidgetKit
+import AVFoundation
+import UserNotifications
 
 @UIApplicationMain
-class AppDelegate: UIResponder, UIApplicationDelegate {
+class AppDelegate: UIResponder, UIApplicationDelegate, UNUserNotificationCenterDelegate {
 
     var window: UIWindow?
 
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
-        // Override point for customization after application launch.
+        // Initialize Firebase before all plugins (required for @capacitor-firebase/authentication)
         FirebaseApp.configure()
+        
+        // Set Notification Delegate to show alerts in foreground
+        UNUserNotificationCenter.current().delegate = self
+        
+        // Explicitly request notification permissions
+        UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge]) { granted, error in
+            if let error = error {
+                print("Notification permission error: \(error)")
+            }
+        }
+        
+        // Allow audio to play even when device is on Silent/Vibrate mode
+        do {
+            let audioSession = AVAudioSession.sharedInstance()
+            try audioSession.setCategory(.playback, mode: .default, options: [.mixWithOthers])
+            try audioSession.setActive(true)
+        } catch {
+            print("Failed to set audio session category: \(error)")
+        }
+        
         return true
     }
 
-    func application(_ application: UIApplication,
-                     configurationForConnecting connectingSceneSession: UISceneSession,
-                     options: UIScene.ConnectionOptions) -> UISceneConfiguration {
-        let configuration = UISceneConfiguration(name: "Default Configuration", sessionRole: connectingSceneSession.role)
-        configuration.delegateClass = SceneDelegate.self
-        configuration.storyboard = UIStoryboard(name: "Main", bundle: nil)
-        return configuration
+    // This method handles notifications while the app is in the foreground
+    func userNotificationCenter(_ center: UNUserNotificationCenter, willPresent notification: UNNotification, withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void) {
+        completionHandler([.alert, .sound])
     }
 
     func applicationWillResignActive(_ application: UIApplication) {
         // Sent when the application is about to move from active to inactive state. This can occur for certain types of temporary interruptions (such as an incoming phone call or SMS message) or when the user quits the application and it begins the transition to the background state.
         // Use this method to pause ongoing tasks, disable timers, and invalidate graphics rendering callbacks. Games should use this method to pause the game.
-        syncWidgetData()
     }
 
     func applicationDidEnterBackground(_ application: UIApplication) {
         // Use this method to release shared resources, save user data, invalidate timers, and store enough application state information to restore your application to its current state in case it is terminated later.
         // If your application supports background execution, this method is called instead of applicationWillTerminate: when the user quits.
-        syncWidgetData()
     }
 
     func applicationWillEnterForeground(_ application: UIApplication) {
@@ -58,52 +73,6 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
         // Feel free to add additional processing here, but if you want the App API to support
         // tracking app url opens, make sure to keep this call
         return ApplicationDelegateProxy.shared.application(application, continue: userActivity, restorationHandler: restorationHandler)
-    }
-
-    // MARK: - Widget Data Synchronization
-    func syncWidgetData() {
-        // Sync widget data from UserDefaults to App Groups
-        let defaults = UserDefaults.standard
-        let appGroupDefaults = UserDefaults(suiteName: "group.lifetrack.widgets") ?? UserDefaults.standard
-        
-        // Sync individual widget keys
-        if let streak = defaults.value(forKey: "widget_streak") {
-            appGroupDefaults.set(streak, forKey: "widget_streak")
-        }
-        
-        if let progress = defaults.value(forKey: "widget_daily_progress") {
-            appGroupDefaults.set(progress, forKey: "widget_daily_progress")
-        }
-        
-        if let focusTime = defaults.value(forKey: "widget_focus_time") {
-            appGroupDefaults.set(focusTime, forKey: "widget_focus_time")
-        }
-        
-        if let weeklyHours = defaults.value(forKey: "widget_weekly_hours") {
-            appGroupDefaults.set(weeklyHours, forKey: "widget_weekly_hours")
-        }
-
-        if let mood = defaults.value(forKey: "widget_mood") {
-            appGroupDefaults.set(mood, forKey: "widget_mood")
-        }
-
-        if let todos = defaults.value(forKey: "widget_todos_json") {
-            appGroupDefaults.set(todos, forKey: "widget_todos_json")
-        }
-
-        if let weeklyTrend = defaults.value(forKey: "widget_weekly_trend_json") {
-            appGroupDefaults.set(weeklyTrend, forKey: "widget_weekly_trend_json")
-        }
-
-        if let accentColor = defaults.value(forKey: "widget_accent_color") {
-            appGroupDefaults.set(accentColor, forKey: "widget_accent_color")
-        }
-        
-        appGroupDefaults.synchronize()
-
-        if #available(iOS 14.0, *) {
-            WidgetCenter.shared.reloadAllTimelines()
-        }
     }
 
 }

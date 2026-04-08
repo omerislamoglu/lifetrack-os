@@ -60,8 +60,8 @@ const DashboardChart = ({ data, isPremium }) => {
               </linearGradient>
             </defs>
             <CartesianGrid vertical={false} stroke="rgba(255, 140, 0, 0.1)" />
-            <XAxis dataKey="name" stroke="var(--text-dim)" tick={{ fontSize: 12 }} tickMargin={10} />
-            <YAxis stroke="var(--text-dim)" tick={{ fontSize: 12 }} width={35} />
+            <XAxis dataKey="name" stroke="var(--text-dim)" tick={{ fontSize: 12 }} tickMargin={10} tickLine={false} axisLine={false} />
+            <YAxis stroke="var(--text-dim)" tick={{ fontSize: 12 }} width={35} tickLine={false} axisLine={false} />
             <Tooltip
               contentStyle={{
                 backgroundColor: 'rgba(31, 41, 55, 0.9)',

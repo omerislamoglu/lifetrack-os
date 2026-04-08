@@ -1,0 +1,377 @@
+/* ── AIMentorChat styles ───────────────────────────────────────────────────── */
+
+/* Container – fills the mentor tab card area */
+.mentor-chat-container {
+  display: flex;
+  flex-direction: column;
+  height: clamp(520px, 75vh, 820px);
+  border-radius: 20px;
+  background: var(--card-bg);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+  border: 1px solid var(--border-color);
+  overflow: hidden;
+  position: relative;
+}
+
+/* ── Header ── */
+.mentor-chat-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 18px;
+  border-bottom: 1px solid var(--border-color);
+  flex-shrink: 0;
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.mentor-chat-header-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.mentor-header-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  box-shadow: 0 4px 14px rgba(59, 130, 246, 0.3);
+}
+
+.mentor-chat-title {
+  margin: 0;
+  font-size: 1.05rem;
+  font-weight: 700;
+}
+
+.mentor-chat-subtitle {
+  margin: 2px 0 0;
+  font-size: 0.75rem;
+  color: var(--text-dim);
+}
+
+.mentor-reset-btn {
+  background: transparent;
+  border: none;
+  color: var(--text-dim);
+  cursor: pointer;
+  padding: 8px;
+  border-radius: 50% !important;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.2s, color 0.2s;
+}
+.mentor-reset-btn:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text-main);
+}
+
+/* ── Quick Chips ── */
+.mentor-chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border-color);
+  flex-shrink: 0;
+  overflow: hidden;
+}
+
+.mentor-chip {
+  background: transparent;
+  border: 1px solid var(--border-color);
+  border-radius: 999px !important;
+  padding: 6px 14px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s, transform 0.15s, box-shadow 0.2s;
+  white-space: nowrap;
+}
+
+.mentor-chip:hover:not(:disabled) {
+  background: rgba(59, 130, 246, 0.08);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.12);
+}
+
+.mentor-chip:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+/* ── Messages area ── */
+.mentor-messages {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  scroll-behavior: smooth;
+}
+
+.mentor-messages::-webkit-scrollbar { width: 4px; }
+.mentor-messages::-webkit-scrollbar-track { background: transparent; }
+.mentor-messages::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 4px; }
+
+/* ── Bubble rows ── */
+.mentor-bubble-row {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  max-width: 100%;
+}
+
+.mentor-bubble-row.user {
+  flex-direction: row-reverse;
+}
+
+.mentor-bubble-row.ai {
+  flex-direction: row;
+}
+
+/* ── Avatar ── */
+.mentor-avatar {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  box-shadow: 0 2px 8px rgba(59, 130, 246, 0.25);
+}
+
+/* ── Bubbles ── */
+.mentor-bubble {
+  position: relative;
+  max-width: 80%;
+  padding: 12px 16px;
+  border-radius: 18px;
+  word-break: break-word;
+  line-height: 1.6;
+  font-size: 0.9rem;
+}
+
+.mentor-bubble-user {
+  border-radius: 18px 18px 4px 18px !important;
+  color: #fff;
+}
+
+.mentor-bubble-ai {
+  border-radius: 18px 18px 18px 4px !important;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--border-color);
+  color: var(--text-main);
+}
+
+.mentor-bubble-text {
+  margin: 0;
+}
+
+/* ── Markdown inside AI bubble ── */
+.mentor-markdown {
+  font-size: 0.9rem;
+  line-height: 1.65;
+}
+
+.mentor-markdown p:first-child { margin-top: 0; }
+.mentor-markdown p:last-child  { margin-bottom: 0; }
+
+.mentor-markdown code {
+  background: rgba(0, 0, 0, 0.3);
+  padding: 2px 6px;
+  border-radius: 5px;
+  font-size: 0.85em;
+  font-family: 'Fira Code', 'Consolas', monospace;
+}
+
+.mentor-markdown pre {
+  background: rgba(0, 0, 0, 0.4);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  padding: 14px;
+  overflow-x: auto;
+  font-size: 0.82em;
+  margin: 10px 0;
+}
+
+.mentor-markdown pre code {
+  background: transparent;
+  padding: 0;
+}
+
+.mentor-markdown h1, .mentor-markdown h2, .mentor-markdown h3 {
+  color: var(--brand-blue);
+  margin: 12px 0 6px;
+  font-size: 1rem;
+}
+
+.mentor-markdown ul, .mentor-markdown ol {
+  padding-left: 20px;
+  margin: 6px 0;
+}
+
+.mentor-markdown strong { color: var(--text-main); font-weight: 700; }
+.mentor-markdown em { color: var(--text-dim); }
+
+/* ── Copy button on AI bubbles ── */
+.mentor-copy-btn {
+  position: absolute;
+  bottom: 6px;
+  right: 8px;
+  background: transparent;
+  border: none !important;
+  color: var(--text-dim);
+  cursor: pointer;
+  padding: 3px;
+  border-radius: 4px !important;
+  display: flex;
+  align-items: center;
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+
+.mentor-bubble-ai:hover .mentor-copy-btn {
+  opacity: 1;
+}
+
+/* ── Typing dots animation ── */
+.mentor-typing-dots {
+  display: flex;
+  gap: 5px;
+  padding: 4px 0;
+  align-items: center;
+}
+
+.mentor-typing-dots span {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--text-dim);
+  animation: mentor-bounce 1.2s infinite;
+}
+
+.mentor-typing-dots span:nth-child(2) { animation-delay: 0.2s; }
+.mentor-typing-dots span:nth-child(3) { animation-delay: 0.4s; }
+
+@keyframes mentor-bounce {
+  0%, 80%, 100% { transform: translateY(0); opacity: 0.4; }
+  40%            { transform: translateY(-6px); opacity: 1; }
+}
+
+/* ── Input bar ── */
+.mentor-input-bar {
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
+  padding: 12px 14px;
+  border-top: 1px solid var(--border-color);
+  flex-shrink: 0;
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.mentor-input {
+  flex: 1;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--border-color) !important;
+  border-radius: 14px !important;
+  color: var(--text-main);
+  padding: 10px 14px;
+  font-size: 0.9rem;
+  font-family: 'Inter', sans-serif;
+  resize: none;
+  outline: none !important;
+  min-height: 42px;
+  max-height: 120px;
+  overflow-y: auto;
+  transition: border-color 0.25s, background 0.25s;
+  line-height: 1.5;
+}
+
+.mentor-input:focus {
+  border-color: var(--brand-blue) !important;
+  background: rgba(255, 255, 255, 0.09);
+}
+
+.mentor-input:disabled {
+  opacity: 0.55;
+}
+
+.mentor-input::placeholder {
+  color: var(--text-dim);
+}
+
+.mentor-send-btn {
+  width: 42px;
+  height: 42px;
+  border-radius: 50% !important;
+  border: none !important;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: opacity 0.2s;
+  box-shadow: 0 4px 14px rgba(59, 130, 246, 0.3);
+}
+
+.mentor-send-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+  box-shadow: none;
+}
+
+/* ── Error banner ── */
+.mentor-error {
+  margin: 0;
+  padding: 8px 16px;
+  font-size: 0.78rem;
+  color: #ef4444;
+  text-align: center;
+  background: rgba(239, 68, 68, 0.06);
+  flex-shrink: 0;
+}
+
+/* ── Light theme overrides ── */
+[data-theme='light'] .mentor-bubble-ai {
+  background: rgba(0, 0, 0, 0.03);
+}
+
+[data-theme='light'] .mentor-markdown code {
+  background: rgba(0, 0, 0, 0.06);
+}
+
+[data-theme='light'] .mentor-markdown pre {
+  background: rgba(0, 0, 0, 0.05);
+  border-color: rgba(0, 0, 0, 0.08);
+}
+
+[data-theme='light'] .mentor-input {
+  background: var(--input-bg);
+}
+
+/* ── Mobile tweak ── */
+@media (max-width: 768px) {
+  .mentor-chat-container {
+    height: clamp(480px, 72vh, 700px);
+    border-radius: 16px;
+  }
+
+  .mentor-bubble {
+    max-width: 88%;
+    font-size: 0.88rem;
+  }
+
+  .mentor-chip {
+    font-size: 0.72rem;
+    padding: 5px 11px;
+  }
+}

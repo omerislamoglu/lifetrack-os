@@ -562,6 +562,16 @@ select,
   opacity: 0.7;
 }
 
+@keyframes ambient-glow-pulse {
+  0%   { box-shadow: 0 0 6px var(--pulse-color, rgba(59,130,246,0.4)); }
+  50%  { box-shadow: 0 0 18px var(--pulse-color, rgba(59,130,246,0.7)); }
+  100% { box-shadow: 0 0 6px var(--pulse-color, rgba(59,130,246,0.4)); }
+}
+
+.ambient-sound-btn.ambient-pulse {
+  animation: ambient-glow-pulse 2.5s ease-in-out infinite;
+}
+
 .ambient-sound-icon {
   display: inline-flex;
   align-items: center;
@@ -741,6 +751,62 @@ select,
   border: none;
   backdrop-filter: none;
   box-shadow: none;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.activity-builder-inputs-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.activity-builder-inputs-row input {
+  width: 100%;
+  padding: 13px 16px;
+  border-radius: 12px;
+  background: var(--input-bg);
+  border: 1px solid var(--border-color);
+  color: var(--text-main);
+  font-size: 0.95rem;
+  outline: none;
+  min-height: 46px;
+  transition: border-color 0.2s, box-shadow 0.2s;
+  box-sizing: border-box;
+}
+
+.activity-builder-inputs-row input:focus {
+  border-color: var(--brand-blue);
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.12);
+}
+
+.activity-builder-name-input {
+  width: 100%;
+  padding: 13px 16px;
+  border-radius: 12px;
+  background: var(--input-bg);
+  border: 1px solid var(--border-color);
+  color: var(--text-main);
+  font-size: 0.95rem;
+  outline: none;
+  min-height: 46px;
+  transition: border-color 0.2s, box-shadow 0.2s;
+  box-sizing: border-box;
+}
+
+.activity-builder-name-input:focus {
+  border-color: var(--brand-blue);
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.12);
+}
+
+.activity-builder-icon-label {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--text-dim);
+  margin-bottom: 6px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
 }
 
 .activity-builder-icon-group {
@@ -792,18 +858,23 @@ input::-webkit-outer-spin-button, input::-webkit-inner-spin-button { -webkit-app
   .dashboard-layout { flex-direction: column; }
   
   .sidebar {
-    width: 100%; height: auto; position: fixed; bottom: 0; top: auto; left: 0;
+    width: 100%; 
+    box-sizing: border-box;
+    height: auto; 
+    min-height: 60px;
+    position: fixed; bottom: 0; top: auto; left: 0;
     border-right: none; 
     border-top: 1px solid var(--border-color);
     display: flex;
     flex-direction: row;
     justify-content: space-around;
-    align-items: stretch;
+    align-items: center; /* İkonlar dikeyde ortalanıyor */
     gap: 0;
-    padding: 5px 8px;
-    padding-bottom: max(5px, env(safe-area-inset-bottom)); /* iOS Alt Bar Boşluğu korundu, bar daraltıldı */
+    padding: 0px 8px; /* Yalnızca sağ/sol boşluk */
+    padding-bottom: calc(30px + env(safe-area-inset-bottom)); /* Safe area + 30px extra breathing room */
     background: var(--sidebar-bg); z-index: 1000;
     box-shadow: 0 -5px 20px rgba(0,0,0,0.2);
+    overflow: visible;
   }
   
   .sidebar-header { display: none; }
@@ -821,7 +892,7 @@ input::-webkit-outer-spin-button, input::-webkit-inner-spin-button { -webkit-app
     min-height: 44px;
   }
 
-  .sidebar-btn { flex: 1 1 0; display: flex; padding: 6px 4px; flex-direction: column; gap: 4px; font-size: 0.7rem; border-radius: 12px; justify-content: center; align-items: center; min-height: auto; max-width: none; }
+  .sidebar-btn { flex: 1 1 0; display: flex; padding: 2px 4px; flex-direction: column; gap: 2px; font-size: 0.7rem; border-radius: 12px; justify-content: center; align-items: center; min-height: auto; max-width: none; }
   .sidebar-btn:hover, .sidebar-btn.active { transform: none; }
   .sidebar-btn span { font-size: 10px; font-weight: 500; white-space: normal; text-align: center; line-height: 1.15; } /* Alt barda etiketler iki satıra düşebilir */
   .sidebar-btn.active::before { display: none; }
@@ -1823,7 +1894,7 @@ input::-webkit-outer-spin-button, input::-webkit-inner-spin-button { -webkit-app
 .scroll-to-top-btn {
   /* Masaüstü konumu */
   position: fixed;
-  bottom: 30px;
+  bottom: 110px;
   right: max(20px, env(safe-area-inset-right));
   width: 50px;
   height: 50px;
@@ -1857,19 +1928,28 @@ input::-webkit-outer-spin-button, input::-webkit-inner-spin-button { -webkit-app
 /* Icon Picker */
 .icon-picker-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(40px, 1fr));
-  gap: 10px;
+  grid-template-columns: repeat(auto-fill, minmax(44px, 1fr));
+  gap: 8px;
   background: var(--input-bg);
-  padding: 10px;
-  justify-content: center; /* İkonları ortala */
+  padding: 12px;
   border-radius: 16px;
   border: 1px solid var(--border-color);
+  max-height: 200px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-color) transparent;
 }
+
+.icon-picker-grid::-webkit-scrollbar {
+  width: 4px;
+}
+.icon-picker-grid::-webkit-scrollbar-track { background: transparent; }
+.icon-picker-grid::-webkit-scrollbar-thumb { background: var(--border-color); border-radius: 4px; }
 
 .icon-picker-btn {
   background: transparent;
   border: 2px solid transparent;
-  border-radius: 8px;
+  border-radius: 10px;
   padding: 8px;
   cursor: pointer;
   display: flex;
@@ -1877,9 +1957,12 @@ input::-webkit-outer-spin-button, input::-webkit-inner-spin-button { -webkit-app
   justify-content: center;
   transition: all 0.2s;
   color: var(--text-dim);
+  min-height: 44px;
+  min-width: 44px;
+  aspect-ratio: 1;
 }
-.icon-picker-btn:hover { background: rgba(255, 255, 255, 0.1); color: var(--text-main); }
-.icon-picker-btn.active { border-color: var(--brand-blue); color: var(--brand-blue); background: rgba(59, 130, 246, 0.1); }
+.icon-picker-btn:hover { background: rgba(255, 255, 255, 0.1); color: var(--text-main); transform: scale(1.1); }
+.icon-picker-btn.active { border-color: var(--brand-blue); color: var(--brand-blue); background: rgba(59, 130, 246, 0.15); box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.12); }
 
 /* Idle Screen Saver */
 .idle-overlay {
@@ -1998,4 +2081,137 @@ input::-webkit-outer-spin-button, input::-webkit-inner-spin-button { -webkit-app
     width: auto;
     max-width: none;
   }
+}
+
+/* ─── iPad / Tablet (769px – 1024px) ────────────────────── */
+@media (min-width: 769px) and (max-width: 1024px) {
+  .app-container {
+    padding: 20px 24px 40px;
+    max-width: 700px;
+    margin: 0 auto;
+  }
+
+  /* Activity builder: tek sütuna al (iPad portrait'te daha okunabilir) */
+  .activity-builder-card {
+    padding: 22px;
+  }
+
+  .activity-builder-inputs-row {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  /* İkon seçici tablet'te daha geniş ve daha göz alıcı */
+  .icon-picker-grid {
+    grid-template-columns: repeat(auto-fill, minmax(52px, 1fr));
+    max-height: 220px;
+    gap: 10px;
+    padding: 14px;
+  }
+
+  .icon-picker-btn {
+    min-height: 52px;
+    min-width: 52px;
+    border-radius: 12px;
+  }
+
+  /* Kartlar ızgarası tablet'te 2 sütun */
+  .grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 20px;
+  }
+
+  /* Günlük hedef input daha belirgin */
+  .daily-goal-input {
+    font-size: 1.1rem !important;
+  }
+
+  /* Ruh hali seçici dikey değil yatay kalsın */
+  .mood-section {
+    flex-direction: row;
+    align-items: center;
+  }
+
+  .mood-btn {
+    font-size: 2.2rem;
+  }
+
+  /* Add btn tablet için daha büyük */
+  .add-btn {
+    min-height: 52px;
+    font-size: 1rem;
+    padding: 14px 28px;
+    border-radius: 14px;
+    width: 100%;
+  }
+}
+/* Settings - Delete Account */
+.delete-account-container {
+  margin-top: 40px;
+  padding-top: 25px;
+  border-top: 1px solid var(--border-color);
+  text-align: center;
+}
+
+.delete-account-btn {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 16px;
+  background: rgba(239, 68, 68, 0.1);
+  color: #ef4444;
+  border: 1px solid rgba(239, 68, 68, 0.2);
+  border-radius: 12px;
+  font-weight: 600;
+  font-size: 1rem;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.delete-account-btn:hover {
+  background: rgba(239, 68, 68, 0.15);
+  border-color: rgba(239, 68, 68, 0.3);
+  transform: translateY(-2px);
+}
+
+.delete-account-btn:active {
+  transform: scale(0.98);
+}
+
+.delete-account-note {
+  margin-top: 12px;
+  font-size: 0.8rem;
+  color: var(--text-dim);
+  line-height: 1.4;
+}
+
+/* Paywall Legal Links */
+.legal-links-footer {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 12px;
+  margin-top: 24px;
+  padding-top: 15px;
+  border-top: 1px solid var(--border-color);
+}
+
+.legal-link {
+  color: var(--text-dim);
+  font-size: 0.8rem;
+  text-decoration: underline;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 5px;
+}
+
+.legal-link:hover {
+  color: var(--text-main);
+}
+
+.legal-separator {
+  color: var(--border-color);
+  font-size: 0.8rem;
 }

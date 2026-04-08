@@ -21,11 +21,17 @@ const config: CapacitorConfig = {
       providers: ['google.com', 'apple.com'],
     },
     SplashScreen: {
-      launchAutoHide: true,
+      launchShowDuration: 0,
+      launchAutoHide: false,
+    },
+    LocalNotifications: {
+      smallIcon: "ic_stat_icon_config_sample",
+      iconColor: "#4264fb",
+      sound: "chime.mp3",
     },
   },
   ios: {
-    useSwiftPackageManagement: true
+    // Correcting lint error: useSwiftPackageManagement is not a valid property here
   }
 };
 
